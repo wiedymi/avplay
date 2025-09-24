@@ -122,7 +122,7 @@ export const VideoPlayer: React.FC = () => {
 	return (
 		<div className="video-player">
 			<div className="header">
-				<h1>LIBAVCODEC WASM VIDEO PLAYER</h1>
+				<h1>AVPLAY</h1>
 				<div className="status" id="status">
 					<span id="status-text">
 						{state?.fileInfo ? "READY" : ready ? "INITIALIZED" : "INITIALIZING"}

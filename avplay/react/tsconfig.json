@@ -1,0 +1,16 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"lib": ["ES2022", "DOM"],
+		"jsx": "react-jsx",
+		"module": "ESNext",
+		"target": "ES2022",
+		"declaration": false,
+		"noEmit": true,
+		"verbatimModuleSyntax": true,
+		"moduleResolution": "bundler",
+		"isolatedModules": true,
+		"types": ["@webgpu/types"]
+	},
+	"include": ["src"]
+}

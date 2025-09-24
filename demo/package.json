@@ -1,0 +1,24 @@
+{
+	"name": "avplay-demo",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "bun --hot src/index.tsx",
+		"build": "bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*' && cp ../output/decoder.js ./public/decoder.js && cp ../node_modules/@avplay/core/dist/workers/decoder-worker.js ./public/decoder-worker.js",
+		"build-worker": "echo 'Worker is provided by @avplay/core'",
+		"start": "NODE_ENV=production bun src/index.tsx",
+		"clean": "rm -rf dist node_modules"
+	},
+	"dependencies": {
+		"react": "^19",
+		"react-dom": "^19",
+		"@avplay/react": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"@webgpu/types": "^0.1.65"
+	}
+}

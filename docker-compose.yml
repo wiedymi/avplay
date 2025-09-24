@@ -1,0 +1,17 @@
+services:
+  # Build decoder WASM
+  build:
+    build:
+      context: .
+    volumes:
+      - ./output:/host-output
+      - build-cache:/app/ffmpeg-build
+      - install-cache:/app/ffmpeg-install
+      - dav1d-cache:/app/dav1d-install
+      - libass-cache:/app/libass-install
+
+volumes:
+  build-cache:
+  install-cache:
+  dav1d-cache:
+  libass-cache:

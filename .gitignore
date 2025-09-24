@@ -1,0 +1,82 @@
+# Build artifacts
+/target/
+/ffmpeg-build/
+/ffmpeg-install/
+dav1d/
+dav1d-install/
+libass-build/
+libass-install/
+
+# Rust (if used)
+Cargo.lock
+
+# Node modules and dependencies
+node_modules/
+.bun/
+
+# Generated files
+*.wasm
+*.js.map
+dist/
+build/
+
+# Build outputs (workspace)
+avplay/core/dist/**/*
+avplay/react/types/**/*
+
+# Demo app build output
+demo/dist
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Docker output
+output/
+
+# Temporary files
+*.tmp
+*.temp
+.cursor
+CLAUDE.md
+.claude
+
+.map
+avplay/**/*.d.ts
+avplay/**/*.js.map
+
+*.map

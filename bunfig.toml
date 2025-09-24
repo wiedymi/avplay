@@ -1,0 +1,9 @@
+[install]
+exact = true
+
+[install.scopes."@avplay"]
+react = "npm:react@^19"
+react-dom = "npm:react-dom@^19"
+typescript = "npm:typescript@^5.6.2"
+"@types/react" = "npm:@types/react@^19"
+"@types/react-dom" = "npm:@types/react-dom@^19"

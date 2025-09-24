@@ -1,0 +1,34 @@
+{
+	"name": "@avplay/core",
+	"version": "0.0.1",
+	"private": false,
+	"type": "module",
+	"sideEffects": false,
+	"types": "./types/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./types/index.d.ts",
+			"bun": "./src/index.ts",
+			"development": "./src/index.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"types",
+		"README.md",
+		"LICENSE"
+	],
+	"devDependencies": {
+		"typescript": "^5.6.2",
+		"@webgpu/types": "^0.1.65"
+	},
+	"dependencies": {
+		"@avplay/decoder": "workspace:*"
+	},
+	"scripts": {
+		"build": "bun build src/index.ts --outdir=dist --format=esm --target=browser --minify && bun run tsc -p tsconfig.build.json",
+		"clean": "rm -rf dist types node_modules"
+	}
+}

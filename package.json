@@ -7,7 +7,7 @@
 		"demo"
 	],
 	"scripts": {
-		"dev": "cd demo && bun run dev",
+		"dev": "bun run build && cd demo && bun run dev",
 		"build": "bun run --filter @avplay/* build",
 		"build:core": "cd avplay/core && bun run build",
 		"build:react": "cd avplay/react && bun run build",

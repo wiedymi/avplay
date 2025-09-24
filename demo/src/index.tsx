@@ -1,7 +1,10 @@
 import { serve } from "bun";
 import index from "./index.html";
 
+const port = Number(process.env.PORT ?? 3000);
+
 const server = serve({
+  port,
   routes: {
     // Serve decoder files from public directory
     "/decoder.js": {
@@ -36,4 +39,4 @@ const server = serve({
   },
 });
 
-console.log(`🚀 Server running at ${server.url}`);
+console.log(`🚀 Server running at http://localhost:${port}`);

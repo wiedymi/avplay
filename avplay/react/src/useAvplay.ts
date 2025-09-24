@@ -1,5 +1,11 @@
-import type { RendererKind } from "@avplay/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { RendererKind, FileInfo } from "@avplay/core";
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import { AvplayPlayer } from "@avplay/core";
 
 type Options = {
@@ -25,7 +31,7 @@ export type AvplayStatePublic = {
 	isPlaying: boolean;
 	isMuted: boolean;
 	subtitlesEnabled: boolean;
-	fileInfo: unknown;
+	fileInfo: FileInfo | null;
 	currentTime: number;
 	currentFrame: number;
 	videoDuration: number;
@@ -59,26 +65,44 @@ export interface UseAvplayApi {
 	extractAttachment: (
 		i: number,
 	) => Promise<{ data: Uint8Array; size: number } | null | undefined>;
-	refresh: () => void;
+	setVolume: (volume: number) => Promise<void>;
+	setMute: (muted: boolean) => Promise<void>;
+	getVolume: () => number;
+	getMute: () => boolean;
 }
 
 export function useAvplay(options: Options = {}): UseAvplayApi {
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const playerRef = useRef<AvplayPlayer | null>(null);
 	const [ready, setReady] = useState(false);
-	const [, setTick] = useState(0);
-	const rerender = useCallback(() => setTick((t) => t + 1), []);
+
+	const subscribe = useCallback((onStoreChange: () => void) => {
+		const p = playerRef.current;
+		if (!p) return () => {};
+		return p.subscribe(onStoreChange);
+	}, []);
+
+	const getSnapshot = useCallback(() => {
+		const p = playerRef.current;
+		return (p?.getState() as unknown as AvplayStatePublic) ?? undefined;
+	}, []);
+
+	// Extract primitives so the effect does not depend on inline object identity
+	const preferredRenderer = options.renderer ?? "webgpu";
+	const workerUrl = options.assets?.workerUrl;
+	const decoderUrl = options.assets?.decoderUrl;
 
 	useEffect(() => {
 		let mounted = true;
 		const init = async () => {
 			if (!canvasRef.current) return;
+			if (playerRef.current) return; // guard against re-init
 
 			const p = new AvplayPlayer({
 				canvas: canvasRef.current,
-				preferredRenderer: options.renderer ?? "webgpu",
+				preferredRenderer,
 				powerPreference: "high-performance",
-				assets: options.assets,
+				assets: workerUrl || decoderUrl ? { workerUrl, decoderUrl } : undefined,
 			});
 			playerRef.current = p;
 			console.log("start initialize");
@@ -92,12 +116,14 @@ export function useAvplay(options: Options = {}): UseAvplayApi {
 			playerRef.current?.dispose();
 			playerRef.current = null;
 		};
-	}, [options.renderer, options.assets]);
+	}, [preferredRenderer, workerUrl, decoderUrl]);
+
+	const state = useSyncExternalStore(subscribe, getSnapshot);
 
 	return {
 		canvasRef,
 		ready,
-		state: playerRef.current?.getState() as unknown as AvplayStatePublic,
+		state,
 		play: async () => {
 			await playerRef.current?.play();
 		},
@@ -136,6 +162,13 @@ export function useAvplay(options: Options = {}): UseAvplayApi {
 			await playerRef.current?.extractTrack(tt, ti),
 		extractAttachment: async (i: number) =>
 			await playerRef.current?.extractAttachment(i),
-		refresh: rerender,
+		setVolume: async (volume: number) => {
+			playerRef.current?.setVolume(volume);
+		},
+		setMute: async (muted: boolean) => {
+			playerRef.current?.setMute(muted);
+		},
+		getVolume: () => playerRef.current?.getVolume() ?? 0,
+		getMute: () => playerRef.current?.getMute() ?? false,
 	} as const;
 }

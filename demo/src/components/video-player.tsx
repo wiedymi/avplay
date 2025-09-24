@@ -48,7 +48,6 @@ export const VideoPlayer: React.FC = () => {
 		switchSubtitleTrack,
 		extractTrack,
 		extractAttachment,
-		refresh,
 	} = useAvplay({
     assets: {
       workerUrl: "/decoder-worker.js",
@@ -62,7 +61,7 @@ export const VideoPlayer: React.FC = () => {
 		const bytes = new Uint8Array(await f.arrayBuffer());
 		await stop?.();
 		await loadFile?.(bytes);
-		refresh();
+		
 	};
 
 	const onLoadSubtitles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -72,7 +71,7 @@ export const VideoPlayer: React.FC = () => {
 		const bytes = new Uint8Array(await f.arrayBuffer());
 		await loadExternalSubtitles?.(name, bytes);
 		if (subtitleInputRef.current) subtitleInputRef.current.value = "";
-		refresh();
+		
 	};
 
 	const onAddFonts = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,7 +85,7 @@ export const VideoPlayer: React.FC = () => {
 		}
 		await rebuildSubtitleFilter?.();
 			if (fontInputRef.current) fontInputRef.current.value = "";
-		refresh();
+		
 	};
 
 	const onSeek = async (e: React.MouseEvent<HTMLDivElement>) => {
@@ -95,7 +94,7 @@ export const VideoPlayer: React.FC = () => {
 		const clickX = e.clientX - rect.left;
 		const progress = Math.clamp(clickX / rect.width, 0, 1);
 		await seek?.(progress * state.videoDuration);
-		refresh();
+		
 	};
 
 	const generateTestPattern = () => {
@@ -221,16 +220,16 @@ export const VideoPlayer: React.FC = () => {
 							} else if (state?.playbackState === PlaybackState.PAUSED || state?.playbackState === PlaybackState.IDLE) {
 								await play?.();
 							}
-							refresh();
+							
 						}}
 					>
 						{state?.playbackState === PlaybackState.PLAYING ? "PAUSE" : state?.playbackState === PlaybackState.BUFFERING ? "BUFFERING" : "PLAY"}
 					</button>
-					<button id="stop-btn" onClick={async () => { await stop?.(); refresh(); }}>STOP</button>
+					<button id="stop-btn" onClick={async () => { await stop?.();  }}>STOP</button>
 					<button
 						id="subtitle-btn"
 						disabled={!state?.fileInfo || (state?.fileInfo?.trackCounts.subtitle ?? 0) === 0}
-						onClick={async () => { await enableSubtitles?.(!(state?.subtitlesEnabled)); refresh(); }}
+						onClick={async () => { await enableSubtitles?.(!(state?.subtitlesEnabled));  }}
 					>
 						{state?.subtitlesEnabled ? "SUBTITLES ON" : "SUBTITLES OFF"}
 					</button>
@@ -238,9 +237,9 @@ export const VideoPlayer: React.FC = () => {
 
 				<TrackList
 					fileInfo={state?.fileInfo ?? null}
-					onVideoTrackSelect={async (index) => { await switchVideoTrack?.(index); refresh(); }}
-					onAudioTrackSelect={async (index) => { await switchAudioTrack?.(index); refresh(); }}
-					onSubtitleTrackSelect={async (index) => { await switchSubtitleTrack?.(index); refresh(); }}
+					onVideoTrackSelect={async (index) => { await switchVideoTrack?.(index);  }}
+					onAudioTrackSelect={async (index) => { await switchAudioTrack?.(index);  }}
+					onSubtitleTrackSelect={async (index) => { await switchSubtitleTrack?.(index);  }}
 					onExtractTrack={async (trackType, index) => {
 						const map = { video: 0, audio: 1, subtitle: 2 } as const;
 						const res = await extractTrack?.(map[trackType], index);

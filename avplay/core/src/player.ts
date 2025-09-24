@@ -60,6 +60,14 @@ export class AvplayPlayer {
 	private rendererKind: RendererKind = "canvas2d";
 
 	private state: AvplayPlayerState;
+	private stateSnapshot: AvplayPlayerState;
+
+	// Subscriptions
+	private listeners: Set<() => void> = new Set();
+	private notifyScheduled = false;
+
+	// Audio control state
+	private volumeLevel = 0.7;
 
 	private frameBuffer: FrameData[] = [];
 	private readonly MAX_FRAME_BUFFER = 60;
@@ -113,6 +121,7 @@ export class AvplayPlayer {
 			bufferHealth: 100,
 			rendererKind: "canvas2d",
 		};
+		this.stateSnapshot = { ...this.state };
 	}
 
 	async initialize(): Promise<void> {
@@ -130,6 +139,8 @@ export class AvplayPlayer {
 		this.state.rendererKind = result.actualKind;
 
 		decoderSingleton.setFrameDecodedCallback(this.handleFrameDecoded);
+		// Notify subscribers that initialization completed and renderer is ready
+		this.updateUi();
 	}
 
 	dispose(): void {
@@ -157,7 +168,28 @@ export class AvplayPlayer {
 	}
 
 	getState(): AvplayPlayerState {
-		return { ...this.state };
+		return this.stateSnapshot;
+	}
+
+	/**
+	 * Subscribe to state changes. Returns an unsubscribe function.
+	 */
+	subscribe(listener: () => void): () => void {
+		this.listeners.add(listener);
+		return () => {
+			this.listeners.delete(listener);
+		};
+	}
+
+	private notifyListeners(): void {
+		if (this.notifyScheduled) return;
+		this.notifyScheduled = true;
+		queueMicrotask(() => {
+			this.notifyScheduled = false;
+			// Refresh snapshot so consumers get stable identity that changes on updates
+			this.stateSnapshot = { ...this.state };
+			for (const l of this.listeners) l();
+		});
 	}
 
 	async loadFile(fileData: Uint8Array): Promise<FileInfo> {
@@ -182,10 +214,12 @@ export class AvplayPlayer {
 		this.state.totalFrames = Math.floor(this.state.videoDuration * fps);
 		this.updateInfoUi(0);
 		this.setPlaybackState("IDLE");
-		// Prime one frame for dimensions
-		try {
-			await decoderSingleton.decodeFrame();
-		} catch {}
+		// Immediately notify so UI enables controls after file load
+		this.updateUi();
+		// Prime and display first frame for poster while staying idle (no state toggles)
+		await this.seek(0);
+		// Ensure any changes are reflected even if priming produced no visible frames
+		this.updateUi();
 		return info;
 	}
 
@@ -199,9 +233,21 @@ export class AvplayPlayer {
 		this.logStartPlayback();
 		this.setPlaybackState("BUFFERING");
 		this.state.isPlaying = true;
+		// Reflect buffering immediately in UI so controls respond
+		this.updateUi();
 
 		this.initAudio();
 		this.isAudioPlaying = true;
+
+		// Ensure AudioContext is running when resuming from pause
+		if (this.audioContext) {
+			try {
+				if (this.audioContext.state === "suspended") {
+					await this.audioContext.resume();
+				}
+				this.nextAudioTime = this.audioContext.currentTime + 0.05;
+			} catch {}
+		}
 
 		try {
 			await decoderSingleton.resume();
@@ -269,8 +315,8 @@ export class AvplayPlayer {
 				await this.audioContext.suspend();
 			} catch {}
 		}
-		// Preserve frame buffer for resume
-		this.updateProgress(0);
+		// Preserve progress position for UI while paused
+		this.updateInfoUi(this.state.currentTime);
 		this.state.playbackState = "PAUSED";
 		if (prev !== "PAUSED") this.updateUi();
 	}
@@ -286,7 +332,25 @@ export class AvplayPlayer {
 		this.nextAudioTime = 0;
 		this.videoStartTime = 0;
 		this.state.lastFrameTime = 0;
-		if (this.renderer?.isReady()) this.renderer.clear();
+		// Show first frame as poster while staying idle (no extra state toggles)
+		try {
+			await decoderSingleton.resume();
+			await decoderSingleton.seek(0);
+			const frame = await decoderSingleton.decodeFrame();
+			if (frame) {
+				this.state.currentFrameData = frame;
+				await this.displayFrame(frame);
+				this.state.currentTime =
+					typeof frame.timestamp === "number" ? frame.timestamp : 0;
+				this.updateInfoUi(this.state.currentTime);
+			}
+		} catch {
+			if (this.renderer?.isReady()) this.renderer.clear();
+		}
+		// Keep decoder quiescent after stop
+		try {
+			await decoderSingleton.pause();
+		} catch {}
 		this.updateUi();
 	}
 
@@ -311,7 +375,8 @@ export class AvplayPlayer {
 			if (this.audioContext && this.audioContext.state === "running") {
 				await this.audioContext.suspend();
 			}
-		} else if (previous === "PAUSED") {
+		} else if (previous === "PAUSED" || previous === "IDLE") {
+			// Ensure decoder processes seek/decode when not actively playing
 			await decoderSingleton.resume();
 		}
 
@@ -356,12 +421,17 @@ export class AvplayPlayer {
 					setTimeout(() => this.play(), 100);
 				} else {
 					this.state.playbackState = previous === "IDLE" ? "IDLE" : "PAUSED";
-					if (this.frameBuffer.length > 0) {
-						const frame = this.frameBuffer[0];
-						if (frame) {
-							this.state.currentFrameData = frame;
-							await this.displayFrame(frame);
-						}
+					// Ensure a frame is shown immediately when seeking while paused/idle
+					let frame = this.frameBuffer.shift() ?? null;
+					if (!frame) {
+						try {
+							const f = await decoderSingleton.decodeFrame();
+							frame = f ?? this.frameBuffer.shift() ?? null;
+						} catch {}
+					}
+					if (frame) {
+						this.state.currentFrameData = frame;
+						await this.displayFrame(frame);
 					}
 				}
 			} else {
@@ -370,6 +440,12 @@ export class AvplayPlayer {
 		} catch {
 			this.state.playbackState = previous;
 			if (wasPlaying) setTimeout(() => this.play(), 100);
+		}
+		// If we were not playing before the seek, return decoder to a quiescent state
+		if (!wasPlaying && (previous === "PAUSED" || previous === "IDLE")) {
+			try {
+				await decoderSingleton.pause();
+			} catch {}
 		}
 		this.updateUi();
 	}
@@ -549,13 +625,7 @@ export class AvplayPlayer {
 
 	// Internal helpers
 	private handleFrameDecoded = (data: FrameData) => {
-		if (
-			this.state.playbackState !== "PLAYING" &&
-			this.state.playbackState !== "BUFFERING" &&
-			this.state.playbackState !== "SEEKING"
-		) {
-			return;
-		}
+		// Accept frames in all states; decode loops are gated elsewhere.
 		if (this.frameBuffer.length < this.MAX_FRAME_BUFFER) {
 			this.frameBuffer.push(data);
 			this.state.bufferHealth =
@@ -658,7 +728,8 @@ export class AvplayPlayer {
 		let buffered = this.frameBuffer.length;
 		while (
 			buffered < targetBuffer &&
-			this.state.playbackState === "BUFFERING"
+			(this.state.playbackState === "BUFFERING" ||
+				this.state.playbackState === "SEEKING")
 		) {
 			try {
 				await this.decodeFrames(true);
@@ -810,6 +881,8 @@ export class AvplayPlayer {
 
 		if (this.state.playbackState === "PLAYING") this.processAudioQueue();
 		this.updateInfoUi(elapsed ?? this.state.currentTime);
+		// Notify listeners every frame; use microtask batching to reduce thrash
+		this.updateUi();
 		this.animationId = requestAnimationFrame(() => this.renderLoop());
 	}
 
@@ -854,10 +927,34 @@ export class AvplayPlayer {
 	}
 
 	private updateUi() {
-		// no-op placeholder to hint React hook polling consumers
+		this.notifyListeners();
 	}
 
 	private logStartPlayback() {
 		// no-op placeholder for consistency with demo logging
+	}
+
+	// Volume/mute controls
+	setVolume(volume: number): void {
+		this.volumeLevel = Math.max(0, Math.min(1, volume));
+		this.initAudio();
+		if (this.gainNode)
+			this.gainNode.gain.value = this.state.isMuted ? 0 : this.volumeLevel;
+		this.updateUi();
+	}
+
+	getVolume(): number {
+		return this.volumeLevel;
+	}
+
+	setMute(muted: boolean): void {
+		this.state.isMuted = muted;
+		this.initAudio();
+		if (this.gainNode) this.gainNode.gain.value = muted ? 0 : this.volumeLevel;
+		this.updateUi();
+	}
+
+	getMute(): boolean {
+		return this.state.isMuted;
 	}
 }

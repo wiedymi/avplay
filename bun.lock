@@ -10,8 +10,18 @@
     "avplay/core": {
       "name": "@avplay/core",
       "version": "0.0.1",
+      "dependencies": {
+        "@avplay/decoder": "workspace:*",
+      },
       "devDependencies": {
         "@webgpu/types": "^0.1.65",
+        "typescript": "^5.6.2",
+      },
+    },
+    "avplay/decoder": {
+      "name": "@avplay/decoder",
+      "version": "0.0.1",
+      "devDependencies": {
         "typescript": "^5.6.2",
       },
     },
@@ -47,6 +57,8 @@
   },
   "packages": {
     "@avplay/core": ["@avplay/core@workspace:avplay/core"],
+
+    "@avplay/decoder": ["@avplay/decoder@workspace:avplay/decoder"],
 
     "@avplay/react": ["@avplay/react@workspace:avplay/react"],
 

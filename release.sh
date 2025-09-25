@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# release.sh v4
+# release.sh v5
 # Usage: ./release.sh v0.1.0 \
 #   [--dry-run] [--otp 123456] \
 #   [--push] [--remote origin] \
 #   [--gh-release] [--gh-draft] [--gh-title "Title"] \
-#   [--proxy http://proxy:8080] [--https-proxy http://proxy:8443] [--registry https://registry.npmjs.org/] [--no-strict-ssl]
+#   [--proxy http://proxy:8080] [--registry https://registry.npmjs.org/] [--no-strict-ssl]
 # - Bumps versions in publishable packages
 # - Rewrites workspace:* deps to ^<version>
 # - Builds packages in dependency order
@@ -33,7 +33,6 @@ GH_RELEASE=false
 GH_DRAFT=false
 GH_TITLE=""
 PROXY=""
-HTTPS_PROXY_URL=""
 NPM_REGISTRY=""
 NPM_STRICT_SSL=""
 
@@ -76,14 +75,6 @@ while [[ $# -gt 0 ]]; do
       PROXY="${2:-}"
       if [[ -z "$PROXY" ]]; then
         echo "--proxy requires a URL" >&2
-        exit 1
-      fi
-      shift 2
-      ;;
-    --https-proxy)
-      HTTPS_PROXY_URL="${2:-}"
-      if [[ -z "$HTTPS_PROXY_URL" ]]; then
-        echo "--https-proxy requires a URL" >&2
         exit 1
       fi
       shift 2
@@ -205,12 +196,10 @@ log "Target version: $VERSION (${TAG})"
 if [[ -n "$PROXY" ]]; then
   export HTTP_PROXY="$PROXY"
   export http_proxy="$PROXY"
+  export HTTPS_PROXY="$PROXY"
+  export https_proxy="$PROXY"
   npm config set proxy "$PROXY" >/dev/null 2>&1 || true
-fi
-if [[ -n "$HTTPS_PROXY_URL" ]]; then
-  export HTTPS_PROXY="$HTTPS_PROXY_URL"
-  export https_proxy="$HTTPS_PROXY_URL"
-  npm config set https-proxy "$HTTPS_PROXY_URL" >/dev/null 2>&1 || true
+  npm config set https-proxy "$PROXY" >/dev/null 2>&1 || true
 fi
 if [[ -n "$NPM_REGISTRY" ]]; then
   export NPM_CONFIG_REGISTRY="$NPM_REGISTRY"

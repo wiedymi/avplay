@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# release.sh v2
-# Usage: ./release.sh v0.1.0 [--dry-run] [--otp 123456]
+# release.sh v3
+# Usage: ./release.sh v0.1.0 [--dry-run] [--otp 123456] [--push] [--remote origin] [--gh-release] [--gh-draft] [--gh-title "Title"]
 # - Bumps versions in publishable packages
 # - Rewrites workspace:* deps to ^<version>
 # - Builds packages in dependency order
@@ -23,6 +23,11 @@ VERSION="${RAW_VERSION#v}"
 TAG="v${VERSION}"
 DRY_RUN=false
 OTP=""
+PUSH=false
+REMOTE="origin"
+GH_RELEASE=false
+GH_DRAFT=false
+GH_TITLE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +41,27 @@ while [[ $# -gt 0 ]]; do
         echo "--otp requires a code" >&2
         exit 1
       fi
+      shift 2
+      ;;
+    --push)
+      PUSH=true
+      shift
+      ;;
+    --remote)
+      REMOTE="${2:-origin}"
+      shift 2
+      ;;
+    --gh-release)
+      GH_RELEASE=true
+      PUSH=true # ensure tags/commits are on remote for the release
+      shift
+      ;;
+    --gh-draft)
+      GH_DRAFT=true
+      shift
+      ;;
+    --gh-title)
+      GH_TITLE="${2:-}"
       shift 2
       ;;
     *)
@@ -193,6 +219,43 @@ for dir in "${PKGS[@]}"; do
   echo " - published $dir"
 done
 
-log "Done. Next steps:"
-echo "  - git push && git push --tags"
-echo "  - Create a GitHub release for ${TAG} if desired"
+# Optionally push commits and tags
+if [[ "$PUSH" == true ]]; then
+  log "Pushing commits and tags to $REMOTE..."
+  git push "$REMOTE" HEAD && git push "$REMOTE" --tags
+else
+  log "Skipped push (enable with --push)"
+fi
+
+# Optionally create a GitHub release via gh
+if [[ "$GH_RELEASE" == true ]]; then
+  if ! command -v gh >/dev/null; then
+    warn "gh CLI not found; skipping GitHub release"
+  else
+    log "Creating GitHub release ${TAG}..."
+    GH_FLAGS=("release" "create" "$TAG" "--verify-tag")
+    if [[ "$GH_DRAFT" == true ]]; then
+      GH_FLAGS+=("--draft")
+    fi
+    if [[ -n "$GH_TITLE" ]]; then
+      GH_FLAGS+=("--title" "$GH_TITLE")
+    else
+      GH_FLAGS+=("--title" "${TAG}")
+    fi
+    GH_BODY=$(cat <<EOF
+Release ${TAG}
+
+Packages published:
+- @avplay/decoder@${VERSION}
+- @avplay/core@${VERSION}
+- @avplay/react@${VERSION}
+EOF
+)
+    # shellcheck disable=SC2086
+    gh ${GH_FLAGS[@]} --notes "$GH_BODY" || warn "Failed to create GitHub release"
+  fi
+else
+  log "Skipped GitHub release (enable with --gh-release)"
+fi
+
+log "Done."

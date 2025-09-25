@@ -198,16 +198,19 @@ if [[ -n "$PROXY" ]]; then
   export http_proxy="$PROXY"
   export HTTPS_PROXY="$PROXY"
   export https_proxy="$PROXY"
-  npm config set proxy "$PROXY" >/dev/null 2>&1 || true
-  npm config set https-proxy "$PROXY" >/dev/null 2>&1 || true
+  export NPM_CONFIG_PROXY="$PROXY"
+  export npm_config_proxy="$PROXY"
+  export NPM_CONFIG_HTTPS_PROXY="$PROXY"
+  export npm_config_https_proxy="$PROXY"
 fi
 if [[ -n "$NPM_REGISTRY" ]]; then
   export NPM_CONFIG_REGISTRY="$NPM_REGISTRY"
-  npm config set registry "$NPM_REGISTRY" >/dev/null 2>&1 || true
+  export npm_config_registry="$NPM_REGISTRY"
 fi
 if [[ "$NPM_STRICT_SSL" == "false" ]]; then
   export NODE_TLS_REJECT_UNAUTHORIZED=0
-  npm config set strict-ssl false >/dev/null 2>&1 || true
+  export NPM_CONFIG_STRICT_SSL=false
+  export npm_config_strict_ssl=false
 fi
 
 # Determine packages (in dependency order)
@@ -260,7 +263,12 @@ fi
 
 log "Publishing packages to npm..."
 for dir in "${PKGS[@]}"; do
-  publish_pkg "$dir"
+  if [[ -n "$PROXY" || -n "$NPM_REGISTRY" || "$NPM_STRICT_SSL" == "false" ]]; then
+    # Ensure per-command isolation of env for npm publish
+    ( export HTTP_PROXY="$HTTP_PROXY" HTTPS_PROXY="$HTTPS_PROXY" NPM_CONFIG_PROXY="$NPM_CONFIG_PROXY" NPM_CONFIG_HTTPS_PROXY="$NPM_CONFIG_HTTPS_PROXY" NPM_CONFIG_REGISTRY="$NPM_CONFIG_REGISTRY" NPM_CONFIG_STRICT_SSL="${NPM_CONFIG_STRICT_SSL:-}" NODE_TLS_REJECT_UNAUTHORIZED="${NODE_TLS_REJECT_UNAUTHORIZED:-}"; publish_pkg "$dir" )
+  else
+    publish_pkg "$dir"
+  fi
   echo " - published $dir"
 done
 

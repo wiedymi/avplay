@@ -1,12 +1,12 @@
 export interface DecoderMessage {
-    type: string;
-    data?: unknown;
-    id?: number;
-    error?: string;
+	type: string;
+	data?: unknown;
+	id?: number;
+	error?: string;
 }
 
 // Forward decoder types from the dedicated decoder package
-export type { FrameData, FileInfo } from "@avplay/decoder";
+export type { FileInfo, FrameData } from "@avplay/decoder";
 
 export interface TrackSwitchData {
 	trackType: "video" | "audio" | "subtitle";

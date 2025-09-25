@@ -1,4 +1,5 @@
-import type { RendererKind, FileInfo } from "@avplay/core";
+import type { FileInfo, RendererKind } from "@avplay/core";
+import { AvplayPlayer } from "@avplay/core";
 import {
 	useCallback,
 	useEffect,
@@ -6,7 +7,6 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
-import { AvplayPlayer } from "@avplay/core";
 
 type Options = {
 	renderer?: RendererKind;

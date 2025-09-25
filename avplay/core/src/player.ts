@@ -1,6 +1,6 @@
+import type { FileInfo, FrameData } from "@avplay/decoder";
 import { decoderSingleton } from "./decoder/decoder-singleton";
 import { RendererFactory } from "./renderers/factory";
-import type { FileInfo, FrameData } from "@avplay/decoder";
 import type {
 	IVideoRenderer,
 	RendererKind,

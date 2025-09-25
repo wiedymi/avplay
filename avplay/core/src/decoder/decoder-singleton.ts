@@ -1,4 +1,6 @@
 import type { FileInfo, FrameData } from "@avplay/decoder";
+import { getDecoderScriptUrl, getDecoderWorkerUrl } from "@avplay/decoder";
+
 // URLs are provided by the host application (e.g., demo) via setAssetUrls
 
 interface WorkerMessage {
@@ -105,8 +107,8 @@ class DecoderSingleton {
 		this.status = "LOADING WASM MODULE";
 		this.error = null;
 		// Resolve worker and decoder asset URLs from configured assets
-		const resolvedWorkerUrl = this.assetWorkerUrl ?? "/decoder-worker.js";
-		const resolvedDecoderUrl = this.assetDecoderUrl ?? "/decoder.js";
+		const resolvedWorkerUrl = this.assetWorkerUrl ?? getDecoderWorkerUrl();
+		const resolvedDecoderUrl = this.assetDecoderUrl ?? getDecoderScriptUrl();
 
 		const worker = new Worker(resolvedWorkerUrl);
 

@@ -72,9 +72,11 @@ bun run dev
 
 Open http://localhost:3000 in your browser.
 
-The demo serves decoder assets at:
-- `/decoder.js` (from `@avplay/decoder`)
-- `/decoder-worker.js` (from `@avplay/decoder`)
+The default asset URLs used by `@avplay/core` are hosted on a CDN:
+- `https://unpkg.com/@avplay/decoder@0.9.0/dist/decoder.js`
+- `https://unpkg.com/@avplay/decoder@0.9.0/dist/decoder-worker.js`
+
+You can override these via the `assets` option if you want to self-host.
 
 ## Features
 

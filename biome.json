@@ -7,7 +7,9 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["./avplay/**/*"]
+		"includes": ["./avplay/**/*"],
+		"experimentalScannerIgnores": ["./avplay/decoder/src/decoder.js"],
+		"maxSize": 2097152
 	},
 	"formatter": {
 		"enabled": true,

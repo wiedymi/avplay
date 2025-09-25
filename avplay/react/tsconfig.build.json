@@ -3,7 +3,7 @@
 	"compilerOptions": {
 		"declaration": true,
 		"emitDeclarationOnly": true,
-		"outDir": "types",
+		"outDir": "dist",
 		"noEmit": false,
 		"types": ["@webgpu/types"]
 	},

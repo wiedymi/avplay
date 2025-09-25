@@ -1,24 +1,25 @@
 {
-	"private": true,
-	"name": "libavcodec-wasm-monorepo",
-	"type": "module",
-	"workspaces": [
-		"avplay/*",
-		"demo"
-	],
-	"scripts": {
-		"dev": "bun run build && cd demo && bun run dev",
+  "private": true,
+  "name": "libavcodec-wasm-monorepo",
+  "type": "module",
+  "workspaces": [
+    "avplay/*",
+    "demo"
+  ],
+  "scripts": {
+    "dev": "bun run build && cd demo && bun run dev",
     "build": "bun run --filter @avplay/decoder build && bun run --filter @avplay/core build && bun run --filter @avplay/react build",
-		"build:core": "cd avplay/core && bun run build",
-		"build:react": "cd avplay/react && bun run build",
-		"clean": "bun run --filter @avplay/* clean && bun run --filter avplay-demo clean",
-		"lint": "biome check",
-		"biome": "biome check --write --unsafe"
-	},
-	"engines": {
-		"bun": ">=1.1.0"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "2.2.4"
-	}
+    "build:core": "cd avplay/core && bun run build",
+    "build:react": "cd avplay/react && bun run build",
+    "build:demo": "cd demo && bun run build",
+    "clean": "bun run --filter @avplay/* clean && bun run --filter avplay-demo clean",
+    "lint": "biome check",
+    "biome": "biome check --write --unsafe"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.2.4"
+  }
 }

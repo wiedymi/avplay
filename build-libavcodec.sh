@@ -82,12 +82,29 @@ emconfigure env PKG_CONFIG_PATH="$PKG_CONFIG_PATH" \
     --enable-demuxer=flac \
     --enable-demuxer=h264 \
     --enable-demuxer=hevc \
+    --enable-demuxer=m4v \
     --enable-demuxer=ivf \
     --enable-demuxer=rawvideo \
     --enable-demuxer=ass \
     --enable-demuxer=srt \
     --enable-demuxer=webvtt \
     --disable-muxers \
+    --enable-muxer=matroska \
+    --enable-muxer=mp4 \
+    --enable-muxer=avi \
+    --enable-muxer=flv \
+    --enable-muxer=mpegts \
+    --enable-muxer=m4v \
+    --enable-muxer=mp3 \
+    --enable-muxer=adts \
+    --enable-muxer=ac3 \
+    --enable-muxer=flac \
+    --enable-muxer=ogg \
+    --enable-muxer=wav \
+    --enable-muxer=webm \
+    --enable-muxer=ass \
+    --enable-muxer=srt \
+    --enable-muxer=webvtt \
     --disable-protocols \
     --enable-protocol=file \
     --disable-asm \

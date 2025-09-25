@@ -63,6 +63,40 @@ const normalizeFormat = (format: unknown): string =>
 		? format.trim().toLowerCase()
 		: "";
 
+const determineTrackFormat = (trackInfo: string, trackType: number, data: Uint8Array): string => {
+	const lower = trackInfo.toLowerCase();
+
+	if (trackType === 2) { // Subtitle
+		if (lower.includes("ass") || lower.includes("ssa")) return "ass";
+		if (lower.includes("subrip") || lower.includes("srt")) return "srt";
+		if (lower.includes("webvtt")) return "webvtt";
+		if (lower.includes("mov_text")) return "srt";
+
+		// Check data content for format detection
+		const textData = new TextDecoder("utf-8").decode(data.slice(0, Math.min(1024, data.length)));
+		if (textData.includes("[Script Info]") || textData.includes("Dialogue:")) return "ass";
+		if (textData.includes("WEBVTT")) return "webvtt";
+		if (/\d+\s*\n\d{2}:\d{2}:\d{2}/.test(textData)) return "srt";
+		return "srt";
+	} else if (trackType === 1) { // Audio
+		if (lower.includes("mp3")) return "mp3";
+		if (lower.includes("aac")) return "adts";
+		if (lower.includes("ac3")) return "ac3";
+		if (lower.includes("flac")) return "flac";
+		if (lower.includes("vorbis")) return "ogg";
+		if (lower.includes("opus")) return "opus";
+		if (lower.includes("pcm")) return "wav";
+		return "matroska";
+	} else if (trackType === 0) { // Video
+		if (lower.includes("vp8") || lower.includes("vp9")) return "webm";
+		if (lower.includes("h.264") || lower.includes("h264")) return "matroska";
+		if (lower.includes("av1")) return "matroska";
+		return "matroska";
+	}
+
+	return "binary";
+};
+
 const formatToExtension = (format: string, trackType: number): string => {
 	const map: Record<string, string> = {
 		ass: "ass",
@@ -541,36 +575,62 @@ class DecoderWorker {
 		filename: string;
 	}> {
 		if (!this.module) throw new Error("Module not initialized");
+
 		const trackInfo = this.module.ccall(
 			"decoder_get_subtitle_track_info",
 			"string",
 			["number", "number"],
 			[this.decoderHandle, trackIndex],
 		) as string;
-		const extractSize = this.module.ccall(
-			"decoder_extract_track",
+
+		// Start streaming extraction
+		const result = this.module.ccall(
+			"decoder_extract_track_start",
 			"number",
 			["number", "number", "number"],
 			[this.decoderHandle, 2, trackIndex],
 		) as number;
-		if (extractSize <= 0)
-			throw new Error(`Subtitle extraction failed with size: ${extractSize}`);
-		const dataPtr = this.module.ccall(
-			"decoder_get_extracted_track_data",
-			"number",
-			[],
-			[],
-		) as number;
-		if (!dataPtr)
-			throw new Error("Failed to get extracted subtitle data pointer");
-		const extractedData = new Uint8Array(
-			this.module.HEAPU8.buffer,
-			dataPtr,
-			extractSize,
-		).slice();
+
+		if (result <= 0) {
+			throw new Error(`Subtitle extraction failed to start: ${result}`);
+		}
+
+		// Stream data chunks
+		const chunks: Uint8Array[] = [];
+		let totalSize = 0;
+		const chunkSize = 65536; // 64KB chunks
+		const buffer = this.module._malloc(chunkSize);
+
+		try {
+			let bytesRead: number;
+			while ((bytesRead = this.module.ccall(
+				"decoder_extract_track_chunk",
+				"number",
+				["number", "number"],
+				[buffer, chunkSize],
+			) as number) > 0) {
+				const chunk = new Uint8Array(bytesRead);
+				chunk.set(this.module.HEAPU8.subarray(buffer, buffer + bytesRead));
+				chunks.push(chunk);
+				totalSize += bytesRead;
+			}
+		} finally {
+			this.module._free(buffer);
+			this.module.ccall("decoder_extract_track_end", null, [], []);
+		}
+
+		// Combine chunks
+		const extractedData = new Uint8Array(totalSize);
+		let offset = 0;
+		for (const chunk of chunks) {
+			extractedData.set(chunk, offset);
+			offset += chunk.length;
+		}
+
 		let format = "unknown";
 		let filename = `subtitle_${trackIndex}`;
 		const lower = trackInfo.toLowerCase();
+
 		if (lower.includes("ass") || lower.includes("ssa")) {
 			format = "ass";
 			filename = `subtitle_${trackIndex}.ass`;
@@ -604,8 +664,8 @@ class DecoderWorker {
 				filename = `subtitle_${trackIndex}.srt`;
 			}
 		}
-		// no-op to ensure types stay referenced
-		return { data: extractedData, size: extractSize, format, filename };
+
+		return { data: extractedData, size: totalSize, format, filename };
 	}
 
 	async extractTrack(
@@ -620,51 +680,101 @@ class DecoderWorker {
 		filename: string;
 	}> {
 		if (!this.module) throw new Error("Module not initialized");
-		const extractSize = this.module.ccall(
-			"decoder_extract_track",
+
+		// Start streaming extraction
+		const result = this.module.ccall(
+			"decoder_extract_track_start",
 			"number",
 			["number", "number", "number"],
 			[this.decoderHandle, trackType, trackIndex],
 		) as number;
-		if (extractSize <= 0) {
-			console.warn(
-				`[decoder-worker] decoder_extract_track returned ${extractSize} for type ${trackType} index ${trackIndex}`,
-			);
-			throw new Error(`Track extraction failed with size: ${extractSize}`);
+
+		console.log(`Extract track start result: ${result} for trackType: ${trackType}, trackIndex: ${trackIndex}`);
+		if (result <= 0) {
+			throw new Error(`Track extraction failed to start: ${result}`);
 		}
-		const dataPtr = this.module.ccall(
-			"decoder_get_extracted_track_data",
-			"number",
-			[],
-			[],
-		) as number;
-		if (!dataPtr) throw new Error("Failed to get extracted track data pointer");
-		const extractedData = new Uint8Array(
-			this.module.HEAPU8.buffer,
-			dataPtr,
-			extractSize,
-		).slice();
-		this.module.ccall("decoder_free_extracted_track", null, [], []);
-		const rawFormat = this.module.ccall(
-			"decoder_get_extracted_track_format_name",
-			"string",
-			[],
-			[],
-		);
-		const normalizedFormat = normalizeFormat(rawFormat);
+
+		// Stream data chunks
+		const chunks: Uint8Array[] = [];
+		let totalSize = 0;
+		const chunkSize = 65536; // 64KB chunks
+		const buffer = this.module._malloc(chunkSize);
+
+		try {
+			let bytesRead: number;
+			let chunkCount = 0;
+			while ((bytesRead = this.module.ccall(
+				"decoder_extract_track_chunk",
+				"number",
+				["number", "number"],
+				[buffer, chunkSize],
+			) as number) > 0) {
+				// Copy chunk data
+				const chunk = new Uint8Array(bytesRead);
+				chunk.set(this.module.HEAPU8.subarray(buffer, buffer + bytesRead));
+				chunks.push(chunk);
+				totalSize += bytesRead;
+				chunkCount++;
+
+				if (chunkCount === 1) {
+					console.log(`First chunk received: ${bytesRead} bytes for trackType: ${trackType}, trackIndex: ${trackIndex}`);
+				}
+			}
+			console.log(`Extraction complete: ${chunkCount} chunks, ${totalSize} total bytes for trackType: ${trackType}, trackIndex: ${trackIndex}`);
+		} finally {
+			this.module._free(buffer);
+			// Clean up streaming state
+			this.module.ccall("decoder_extract_track_end", null, [], []);
+		}
+
+		if (totalSize === 0) {
+			console.error(`No data extracted from track - trackType: ${trackType}, trackIndex: ${trackIndex}, chunks: ${chunks.length}`);
+			throw new Error("No data extracted from track");
+		}
+
+		// Concatenate all chunks
+		const extractedData = new Uint8Array(totalSize);
+		let offset = 0;
+		for (const chunk of chunks) {
+			extractedData.set(chunk, offset);
+			offset += chunk.length;
+		}
+
+		// Get track info to determine format
+		let trackInfo = "";
+		if (trackType === 0) { // Video
+			trackInfo = this.module.ccall(
+				"decoder_get_video_track_info",
+				"string",
+				["number", "number"],
+				[this.decoderHandle, trackIndex],
+			) as string;
+		} else if (trackType === 1) { // Audio
+			trackInfo = this.module.ccall(
+				"decoder_get_audio_track_info",
+				"string",
+				["number", "number"],
+				[this.decoderHandle, trackIndex],
+			) as string;
+		} else if (trackType === 2) { // Subtitle
+			trackInfo = this.module.ccall(
+				"decoder_get_subtitle_track_info",
+				"string",
+				["number", "number"],
+				[this.decoderHandle, trackIndex],
+			) as string;
+		}
+
+		// Determine format based on track info and type
+		const normalizedFormat = determineTrackFormat(trackInfo, trackType, extractedData);
 		const extension = formatToExtension(normalizedFormat, trackType);
 		const mimeType = extensionToMime(extension, trackType);
-		// Ask C for track info to enrich filename with language/title when available
-		let trackInfo: string | undefined;
-		try {
-			if (trackType === 0) trackInfo = this.module.ccall("decoder_get_video_track_info", "string", ["number", "number"], [this.decoderHandle, trackIndex]) as string;
-			else if (trackType === 1) trackInfo = this.module.ccall("decoder_get_audio_track_info", "string", ["number", "number"], [this.decoderHandle, trackIndex]) as string;
-			else if (trackType === 2) trackInfo = this.module.ccall("decoder_get_subtitle_track_info", "string", ["number", "number"], [this.decoderHandle, trackIndex]) as string;
-		} catch {}
+
 		const filename = buildTrackFilename(trackType, trackIndex, extension, trackInfo);
+
 		return {
 			data: extractedData,
-			size: extractSize,
+			size: totalSize,
 			format: normalizedFormat || "binary",
 			extension,
 			mimeType,
@@ -672,28 +782,6 @@ class DecoderWorker {
 		};
 	}
 
-	async getExtractedTrackData(): Promise<Uint8Array | null> {
-		if (!this.module) throw new Error("Module not initialized");
-		const ptr = this.module.ccall(
-			"decoder_get_extracted_track_data",
-			"number",
-			[],
-			[],
-		) as number;
-		if (!ptr) return null;
-		const size = this.module.ccall(
-			"decoder_get_extracted_track_size",
-			"number",
-			[],
-			[],
-		) as number;
-		return new Uint8Array(this.module.HEAPU8.buffer, ptr, size).slice();
-	}
-
-	async freeExtractedTrack(): Promise<void> {
-		if (!this.module) throw new Error("Module not initialized");
-		this.module.ccall("decoder_free_extracted_track", null, [], []);
-	}
 
 	async getAttachmentData(
 		attachmentIndex: number,
@@ -842,13 +930,6 @@ self.addEventListener("message", async (event: MessageEvent<WorkerMessage>) => {
 			result = await worker.extractTrack(resolvedType, trackIndex);
 			break;
 		}
-			case "get_extracted_track_data":
-				result = await worker.getExtractedTrackData();
-				break;
-			case "free_extracted_track":
-				await worker.freeExtractedTrack();
-				result = { success: true };
-				break;
 			case "get_attachment_data":
 				result = await worker.getAttachmentData(data as number);
 				break;

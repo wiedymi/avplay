@@ -21,9 +21,9 @@ extern int decoder_get_attachment_size(AVDecoder *decoder, int attachment_index)
 static int init_subtitle_filter(AVDecoder *decoder);
 static int setup_extracted_subtitle_file_for_filter(AVDecoder *decoder);
 
-extern int decoder_extract_track(AVDecoder *decoder, int track_type, int track_index);
-extern uint8_t* decoder_get_extracted_track_data();
-extern void decoder_free_extracted_track();
+extern int decoder_extract_track_start(AVDecoder *decoder, int track_type, int track_index);
+extern int decoder_extract_track_chunk(uint8_t *buffer, int buffer_size);
+extern void decoder_extract_track_end();
 
 // Subtitle track info functions
 EMSCRIPTEN_KEEPALIVE
@@ -246,14 +246,9 @@ static int init_subtitle_filter(AVDecoder *decoder) {
 static int setup_extracted_subtitle_file_for_filter(AVDecoder *decoder) {
     if (!decoder) return -1;
 
-
-    int extract_size = decoder_extract_track(decoder, 2, decoder->selected_subtitle_stream);
-    if (extract_size <= 0) {
-        return -1;
-    }
-
-    uint8_t *subtitle_data = decoder_get_extracted_track_data();
-    if (!subtitle_data) {
+    // Start streaming extraction
+    int result = decoder_extract_track_start(decoder, 2, decoder->selected_subtitle_stream);
+    if (result <= 0) {
         return -1;
     }
 
@@ -262,22 +257,40 @@ static int setup_extracted_subtitle_file_for_filter(AVDecoder *decoder) {
     if (!temp_file) {
         free(decoder->subtitle_file_path);
         decoder->subtitle_file_path = NULL;
-        decoder_free_extracted_track();
+        decoder_extract_track_end();
         return -1;
     }
 
-    size_t written = fwrite(subtitle_data, 1, extract_size, temp_file);
+    // Stream data directly to file
+    uint8_t buffer[65536]; // 64KB buffer
+    int total_written = 0;
+    int chunk_size;
+
+    while ((chunk_size = decoder_extract_track_chunk(buffer, sizeof(buffer))) > 0) {
+        size_t written = fwrite(buffer, 1, chunk_size, temp_file);
+        if (written != chunk_size) {
+            fclose(temp_file);
+            remove(decoder->subtitle_file_path);
+            free(decoder->subtitle_file_path);
+            decoder->subtitle_file_path = NULL;
+            decoder_extract_track_end();
+            return -1;
+        }
+        total_written += written;
+    }
+
     fclose(temp_file);
 
-    if (written != extract_size) {
+    // Clean up streaming state
+    decoder_extract_track_end();
+
+    // Check if we got any data
+    if (total_written <= 0) {
         remove(decoder->subtitle_file_path);
         free(decoder->subtitle_file_path);
         decoder->subtitle_file_path = NULL;
-        decoder_free_extracted_track();
         return -1;
     }
-
-    decoder_free_extracted_track();
 
     // Create fonts directory using Emscripten FS
     EM_ASM({
@@ -337,7 +350,7 @@ static int setup_extracted_subtitle_file_for_filter(AVDecoder *decoder) {
     }
 
     fprintf(stderr, "DEBUG: Subtitle file setup complete: %s (%d bytes)\n",
-            decoder->subtitle_file_path, extract_size);
+            decoder->subtitle_file_path, total_written);
     return 0;
 }
 

@@ -137,17 +137,9 @@ typedef struct {
     BufferPool *buffer_pool;
 } AVDecoder;
 
-// Track extraction buffer (shared across modules)
-extern uint8_t *track_extract_buffer;
-extern int track_extract_buffer_size;
-extern int track_extract_buffer_capacity;
-extern char track_extract_format_name[64];
-
 // Internal helper functions
 int read_packet_callback(void *opaque, uint8_t *buf, int buf_size);
 int64_t seek_callback(void *opaque, int64_t offset, int whence);
-int write_to_buffer(void *opaque, const uint8_t *buf, int buf_size);
-int64_t seek_in_buffer(void *opaque, int64_t offset, int whence);
 
 // Buffer pool management functions
 BufferPool* buffer_pool_create(void);

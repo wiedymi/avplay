@@ -112,7 +112,17 @@ class DecoderSingleton {
 		const resolvedDecoderUrl = this.assetDecoderUrl ?? getDecoderScriptUrl();
 		console.log("Resolved worker URL:", resolvedWorkerUrl);
 		console.log("Resolved decoder URL:", resolvedDecoderUrl);
-		const worker = new Worker(resolvedWorkerUrl);
+		let worker: Worker;
+		try {
+			worker = new Worker(resolvedWorkerUrl);
+		} catch (error) {
+			// Fallback for environments that block cross-origin Worker scripts
+			// Bootstraps a same-origin blob worker that imports the remote worker script
+			const bootstrap = `self.importScripts(${JSON.stringify(resolvedWorkerUrl)});`;
+			const blob = new Blob([bootstrap], { type: "application/javascript" });
+			const blobUrl = URL.createObjectURL(blob);
+			worker = new Worker(blobUrl);
+		}
 
 		worker.addEventListener("message", this.handleMessage);
 		this.worker = worker;

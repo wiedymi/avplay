@@ -112,11 +112,12 @@ const extensionToMime = (extension: string, trackType: number): string => {
 };
 
 const sanitize = (s: string): string =>
-	s
-		.normalize("NFKD")
-		.replace(/[^\w\-\.\s\[\]\(\)]/g, "")
-		.replace(/\s+/g, "_")
-		.slice(0, 80);
+  s
+    .normalize("NFKC")
+    // Keep all unicode letters/numbers and a small safe set of symbols
+    .replace(/[^\p{L}\p{N}\-._\s\[\]\(\)]/gu, "")
+    .replace(/\s+/g, "_")
+    .slice(0, 100);
 
 const parseLangAndTitle = (info: string | undefined) => {
 	if (!info) return { lang: "", title: "" } as const;

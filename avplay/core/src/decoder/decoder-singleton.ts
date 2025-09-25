@@ -107,9 +107,11 @@ class DecoderSingleton {
 		this.status = "LOADING WASM MODULE";
 		this.error = null;
 		// Resolve worker and decoder asset URLs from configured assets
+		console.log("Initializing decoder...");
 		const resolvedWorkerUrl = this.assetWorkerUrl ?? getDecoderWorkerUrl();
 		const resolvedDecoderUrl = this.assetDecoderUrl ?? getDecoderScriptUrl();
-
+		console.log("Resolved worker URL:", resolvedWorkerUrl);
+		console.log("Resolved decoder URL:", resolvedDecoderUrl);
 		const worker = new Worker(resolvedWorkerUrl);
 
 		worker.addEventListener("message", this.handleMessage);

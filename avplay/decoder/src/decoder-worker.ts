@@ -47,14 +47,13 @@ interface WASMModule {
 
 declare function createDecoderModule(): Promise<WASMModule>;
 
-class CleanDecoderWorker {
+class DecoderWorker {
 	private module: WASMModule | null = null;
 	private decoderHandle: number = 0;
 	private isInitialized = false;
 	private isPaused = false;
-	private decoderScriptUrl: string | null = null;
 
-	async init(): Promise<{
+	async init(decoderUrl?: string): Promise<{
 		success: boolean;
 		version?: string;
 		error?: string;
@@ -65,7 +64,7 @@ class CleanDecoderWorker {
 				return { success: true, version: "Already initialized" };
 			}
 			const loadTimer = perfTimer("script_load");
-			const url = this.decoderScriptUrl || "/decoder.js";
+			const url = decoderUrl || "/decoder.js";
 			self.importScripts(url);
 			loadTimer.end();
 			if (typeof createDecoderModule === "undefined") {
@@ -635,7 +634,7 @@ class CleanDecoderWorker {
 	}
 }
 
-const worker = new CleanDecoderWorker();
+const worker = new DecoderWorker();
 
 self.addEventListener("message", async (event: MessageEvent<WorkerMessage>) => {
 	const { type, data, id } = event.data;
@@ -647,11 +646,7 @@ self.addEventListener("message", async (event: MessageEvent<WorkerMessage>) => {
 					data &&
 					typeof (data as { decoderUrl?: string }).decoderUrl === "string"
 				)
-					(
-						worker as unknown as { decoderScriptUrl: string | null }
-					).decoderScriptUrl =
-						(data as { decoderUrl?: string }).decoderUrl ?? null;
-				result = await worker.init();
+				result = await worker.init((data as { decoderUrl?: string }).decoderUrl);
 				break;
 			case "load_file":
 				result = await worker.loadFile(data as Uint8Array);

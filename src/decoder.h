@@ -12,6 +12,7 @@
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersrc.h>
 #include <libavfilter/buffersink.h>
+#include <libavutil/error.h>
 #include <emscripten.h>
 #include <stdlib.h>
 #include <string.h>
@@ -140,6 +141,7 @@ typedef struct {
 extern uint8_t *track_extract_buffer;
 extern int track_extract_buffer_size;
 extern int track_extract_buffer_capacity;
+extern char track_extract_format_name[64];
 
 // Internal helper functions
 int read_packet_callback(void *opaque, uint8_t *buf, int buf_size);

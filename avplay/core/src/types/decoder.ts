@@ -28,3 +28,10 @@ export interface ExtractionResult {
 	data: Uint8Array;
 	size: number;
 }
+
+export interface TrackExtractionResult extends ExtractionResult {
+	format: string;
+	extension: string;
+	mimeType: string;
+	filename: string;
+}

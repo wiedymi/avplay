@@ -5,6 +5,7 @@ extern int init_subtitle_decoder(AVDecoder *decoder);
 uint8_t *track_extract_buffer = NULL;
 int track_extract_buffer_size = 0;
 int track_extract_buffer_capacity = 0;
+char track_extract_format_name[64] = {0};
 
 EMSCRIPTEN_KEEPALIVE
 AVDecoder* decoder_create() {

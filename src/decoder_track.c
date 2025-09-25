@@ -82,6 +82,8 @@ int decoder_extract_track(AVDecoder *decoder, int track_type, int track_index) {
     AVStream *input_stream = decoder->format_ctx->streams[stream_idx];
     AVCodecParameters *codecpar = input_stream->codecpar;
 
+    track_extract_format_name[0] = '\0';
+
     // Initialize track extraction buffer
     if (track_extract_buffer) {
         free(track_extract_buffer);
@@ -114,7 +116,7 @@ int decoder_extract_track(AVDecoder *decoder, int track_type, int track_index) {
                 format_name = "webvtt";
                 break;
             case AV_CODEC_ID_MOV_TEXT:
-                format_name = "mov_text";
+                format_name = "srt";
                 break;
             default:
                 format_name = "matroska";
@@ -179,6 +181,19 @@ int decoder_extract_track(AVDecoder *decoder, int track_type, int track_index) {
         }
     }
 
+    const char *selected_format = format_name;
+    if (!selected_format && output_format && output_format->name) {
+        selected_format = output_format->name;
+    }
+    if (!selected_format) {
+        selected_format = "binary";
+    }
+    snprintf(track_extract_format_name, sizeof(track_extract_format_name), "%s", selected_format);
+    char *comma_pos = strchr(track_extract_format_name, ',');
+    if (comma_pos) {
+        *comma_pos = '\0';
+    }
+
     // Allocate AVIO buffer
     uint8_t *avio_buffer = (uint8_t*)av_malloc(32768);
     if (!avio_buffer) {
@@ -216,6 +231,7 @@ int decoder_extract_track(AVDecoder *decoder, int track_type, int track_index) {
         ret = AVERROR(ENOMEM);
         goto cleanup;
     }
+
 
     ret = avcodec_parameters_copy(output_stream->codecpar, input_stream->codecpar);
     if (ret < 0) {
@@ -309,6 +325,11 @@ void decoder_free_extracted_track() {
         track_extract_buffer_size = 0;
         track_extract_buffer_capacity = 0;
     }
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char* decoder_get_extracted_track_format_name() {
+    return track_extract_format_name;
 }
 
 EMSCRIPTEN_KEEPALIVE

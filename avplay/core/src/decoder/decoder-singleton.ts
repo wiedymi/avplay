@@ -1,5 +1,6 @@
 import type { FileInfo, FrameData } from "@avplay/decoder";
 import { getDecoderScriptUrl, getDecoderWorkerUrl } from "@avplay/decoder";
+import type { TrackExtractionResult } from "../types";
 
 // URLs are provided by the host application (e.g., demo) via setAssetUrls
 
@@ -205,8 +206,8 @@ class DecoderSingleton {
 	extractTrack(
 		trackType: number,
 		trackIndex: number,
-	): Promise<{ data: Uint8Array; size: number }> {
-		return this.request<{ data: Uint8Array; size: number }>("extract_track", {
+	): Promise<TrackExtractionResult> {
+		return this.request<TrackExtractionResult>("extract_track", {
 			trackType,
 			trackIndex,
 		});

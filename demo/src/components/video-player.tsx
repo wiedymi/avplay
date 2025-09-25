@@ -56,7 +56,7 @@ export const VideoPlayer: React.FC = () => {
 		const bytes = new Uint8Array(await f.arrayBuffer());
 		await stop?.();
 		await loadFile?.(bytes);
-		
+
 	};
 
 	const onLoadSubtitles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,7 +66,7 @@ export const VideoPlayer: React.FC = () => {
 		const bytes = new Uint8Array(await f.arrayBuffer());
 		await loadExternalSubtitles?.(name, bytes);
 		if (subtitleInputRef.current) subtitleInputRef.current.value = "";
-		
+
 	};
 
 	const onAddFonts = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,7 +80,7 @@ export const VideoPlayer: React.FC = () => {
 		}
 		await rebuildSubtitleFilter?.();
 			if (fontInputRef.current) fontInputRef.current.value = "";
-		
+
 	};
 
 	const onSeek = async (e: React.MouseEvent<HTMLDivElement>) => {
@@ -89,7 +89,7 @@ export const VideoPlayer: React.FC = () => {
 		const clickX = e.clientX - rect.left;
 		const progress = Math.clamp(clickX / rect.width, 0, 1);
 		await seek?.(progress * state.videoDuration);
-		
+
 	};
 
 	const generateTestPattern = () => {
@@ -215,7 +215,7 @@ export const VideoPlayer: React.FC = () => {
 							} else if (state?.playbackState === PlaybackState.PAUSED || state?.playbackState === PlaybackState.IDLE) {
 								await play?.();
 							}
-							
+
 						}}
 					>
 						{state?.playbackState === PlaybackState.PLAYING ? "PAUSE" : state?.playbackState === PlaybackState.BUFFERING ? "BUFFERING" : "PLAY"}
@@ -239,31 +239,49 @@ export const VideoPlayer: React.FC = () => {
 						const map = { video: 0, audio: 1, subtitle: 2 } as const;
 						const res = await extractTrack?.(map[trackType], index);
 						if (res && res.data) {
-							const blob = new Blob([res.data.slice().buffer as ArrayBuffer]);
+							const mime = res.mimeType ?? "application/octet-stream";
+							const fallbackExtension = res.extension ? `.${res.extension}` : "";
+							const filename =
+								res.filename && res.filename.trim().length > 0
+									? res.filename
+									: `${trackType}_track_${index + 1}${fallbackExtension}`;
+							const blob = new Blob([res.data], { type: mime });
 								const url = URL.createObjectURL(blob);
 								const a = document.createElement("a");
 								a.href = url;
-							a.download = `${trackType}_track_${index + 1}`;
+							a.download = filename;
 								document.body.appendChild(a);
 								a.click();
 								document.body.removeChild(a);
 								URL.revokeObjectURL(url);
+						} else {
+							console.warn(`Track extraction returned no data for ${trackType} index ${index}`);
 						}
 					}}
-					onDownloadAttachment={async (index) => {
-						const res = await extractAttachment?.(index);
-						if (res && res.data) {
-							const blob = new Blob([res.data.slice().buffer as ArrayBuffer]);
-								const url = URL.createObjectURL(blob);
-								const a = document.createElement("a");
-								a.href = url;
-							a.download = `attachment_${index + 1}`;
-								document.body.appendChild(a);
-								a.click();
-								document.body.removeChild(a);
-								URL.revokeObjectURL(url);
+				onDownloadAttachment={async (index) => {
+					const res = await extractAttachment?.(index);
+					if (res && res.data) {
+						const info = state?.fileInfo?.attachments?.[index] ?? "";
+						const metaMatch = info.match(/Attachment\s+\d+:\s+(.+?)\s+\(([^,]+),/i);
+						let filename = `attachment_${index + 1}`;
+						let mimeType = "application/octet-stream";
+						if (metaMatch) {
+							const [, name, mime] = metaMatch;
+							if (name?.trim()) filename = name.trim();
+							if (mime && mime.toLowerCase() !== "unknown")
+								mimeType = mime.trim();
 						}
-					}}
+						const blob = new Blob([res.data], { type: mimeType });
+						const url = URL.createObjectURL(blob);
+						const a = document.createElement("a");
+						a.href = url;
+						a.download = filename || `attachment_${index + 1}`;
+						document.body.appendChild(a);
+						a.click();
+						document.body.removeChild(a);
+						URL.revokeObjectURL(url);
+					}
+				}}
 				/>
 			</div>
 
@@ -283,5 +301,3 @@ export const VideoPlayer: React.FC = () => {
 		</div>
 	);
 }
-
-

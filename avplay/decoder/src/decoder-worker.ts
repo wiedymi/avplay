@@ -47,6 +47,102 @@ interface WASMModule {
 
 declare function createDecoderModule(): Promise<WASMModule>;
 
+const TRACK_TYPE_LABEL: Record<number, "video" | "audio" | "subtitle"> = {
+	0: "video",
+	1: "audio",
+	2: "subtitle",
+};
+
+const normalizeFormat = (format: unknown): string =>
+	typeof format === "string" && format.trim().length > 0
+		? format.trim().toLowerCase()
+		: "";
+
+const formatToExtension = (format: string, trackType: number): string => {
+	const map: Record<string, string> = {
+		ass: "ass",
+		ssa: "ssa",
+		srt: "srt",
+		webvtt: "vtt",
+		vtt: "vtt",
+		mp3: "mp3",
+		aac: "aac",
+		ac3: "ac3",
+		flac: "flac",
+		ogg: "ogg",
+		opus: "opus",
+		wav: "wav",
+		webm: "webm",
+		mp4: "mp4",
+		m4a: "m4a",
+		mpegts: "ts",
+		ts: "ts",
+	};
+	if (format === "matroska") {
+		return trackType === 0 ? "mkv" : trackType === 1 ? "mka" : "mks";
+	}
+	if (format === "mov_text") {
+		return "srt";
+	}
+	return map[format] ?? (format || (trackType === 0 ? "mkv" : "bin"));
+};
+
+const extensionToMime = (extension: string, trackType: number): string => {
+	const map: Record<string, string> = {
+		ass: "text/x-ass",
+		ssa: "text/x-ssa",
+		srt: "text/srt",
+		vtt: "text/vtt",
+		mp3: "audio/mpeg",
+		aac: "audio/aac",
+		ac3: "audio/ac3",
+		flac: "audio/flac",
+		ogg: "audio/ogg",
+		opus: "audio/opus",
+		wav: "audio/wav",
+		webm: trackType === 0 ? "video/webm" : "audio/webm",
+		mp4: trackType === 0 ? "video/mp4" : "audio/mp4",
+		m4a: "audio/mp4",
+		mkv: "video/x-matroska",
+		mka: "audio/x-matroska",
+		mks: "text/x-matroska",
+		ts: "video/mp2t",
+	};
+	return map[extension] ?? "application/octet-stream";
+};
+
+const sanitize = (s: string): string =>
+	s
+		.normalize("NFKD")
+		.replace(/[^\w\-\.\s\[\]\(\)]/g, "")
+		.replace(/\s+/g, "_")
+		.slice(0, 80);
+
+const parseLangAndTitle = (info: string | undefined) => {
+	if (!info) return { lang: "", title: "" } as const;
+	const mLang = info.match(/\[([^\]]+)\]/); // [eng]
+	const mTitle = info.match(/"([^"]+)"/); // "Title"
+	return { lang: mLang?.[1] ?? "", title: mTitle?.[1] ?? "" } as const;
+};
+
+const buildTrackFilename = (
+	trackType: number,
+	trackIndex: number,
+	extension: string,
+	info?: string,
+): string => {
+	const base = TRACK_TYPE_LABEL[trackType] ?? "track";
+	const { lang, title } = parseLangAndTitle(info);
+	const parts = [
+		`${base}_track_${trackIndex + 1}`,
+		lang ? sanitize(lang) : "",
+		title ? sanitize(title) : "",
+	].filter(Boolean);
+	const name = parts.join(".");
+	return extension ? `${name}.${extension}` : name;
+};
+
+
 class DecoderWorker {
 	private module: WASMModule | null = null;
 	private decoderHandle: number = 0;
@@ -494,7 +590,14 @@ class DecoderWorker {
 	async extractTrack(
 		trackType: number,
 		trackIndex: number,
-	): Promise<{ data: Uint8Array; size: number }> {
+	): Promise<{
+		data: Uint8Array;
+		size: number;
+		format: string;
+		extension: string;
+		mimeType: string;
+		filename: string;
+	}> {
 		if (!this.module) throw new Error("Module not initialized");
 		const extractSize = this.module.ccall(
 			"decoder_extract_track",
@@ -502,8 +605,12 @@ class DecoderWorker {
 			["number", "number", "number"],
 			[this.decoderHandle, trackType, trackIndex],
 		) as number;
-		if (extractSize <= 0)
+		if (extractSize <= 0) {
+			console.warn(
+				`[decoder-worker] decoder_extract_track returned ${extractSize} for type ${trackType} index ${trackIndex}`,
+			);
 			throw new Error(`Track extraction failed with size: ${extractSize}`);
+		}
 		const dataPtr = this.module.ccall(
 			"decoder_get_extracted_track_data",
 			"number",
@@ -517,7 +624,31 @@ class DecoderWorker {
 			extractSize,
 		).slice();
 		this.module.ccall("decoder_free_extracted_track", null, [], []);
-		return { data: extractedData, size: extractSize };
+		const rawFormat = this.module.ccall(
+			"decoder_get_extracted_track_format_name",
+			"string",
+			[],
+			[],
+		);
+		const normalizedFormat = normalizeFormat(rawFormat);
+		const extension = formatToExtension(normalizedFormat, trackType);
+		const mimeType = extensionToMime(extension, trackType);
+		// Ask C for track info to enrich filename with language/title when available
+		let trackInfo: string | undefined;
+		try {
+			if (trackType === 0) trackInfo = this.module.ccall("decoder_get_video_track_info", "string", ["number", "number"], [this.decoderHandle, trackIndex]) as string;
+			else if (trackType === 1) trackInfo = this.module.ccall("decoder_get_audio_track_info", "string", ["number", "number"], [this.decoderHandle, trackIndex]) as string;
+			else if (trackType === 2) trackInfo = this.module.ccall("decoder_get_subtitle_track_info", "string", ["number", "number"], [this.decoderHandle, trackIndex]) as string;
+		} catch {}
+		const filename = buildTrackFilename(trackType, trackIndex, extension, trackInfo);
+		return {
+			data: extractedData,
+			size: extractSize,
+			format: normalizedFormat || "binary",
+			extension,
+			mimeType,
+			filename,
+		};
 	}
 
 	async getExtractedTrackData(): Promise<Uint8Array | null> {
@@ -669,18 +800,27 @@ self.addEventListener("message", async (event: MessageEvent<WorkerMessage>) => {
 			case "enable_subtitles":
 				result = await worker.enableSubtitles(data as boolean);
 				break;
-			case "extract_track": {
-				const { trackType, trackIndex } = data as {
-					trackType: string;
-					trackIndex: number;
+		case "extract_track": {
+			const { trackType, trackIndex } = data as {
+				trackType: string | number;
+				trackIndex: number;
+			};
+			let resolvedType: number | undefined;
+			if (typeof trackType === "number") {
+				resolvedType = trackType;
+			} else {
+				const map: Record<string, number> = {
+					video: 0,
+					audio: 1,
+					subtitle: 2,
 				};
-				const map: Record<string, number> = { video: 0, audio: 1, subtitle: 2 };
-				const tt = map[trackType];
-				if (tt === undefined)
-					throw new Error(`Invalid track type: ${trackType}`);
-				result = await worker.extractTrack(tt, trackIndex);
-				break;
+				resolvedType = map[trackType];
 			}
+			if (resolvedType === undefined)
+				throw new Error(`Invalid track type: ${trackType}`);
+			result = await worker.extractTrack(resolvedType, trackIndex);
+			break;
+		}
 			case "get_extracted_track_data":
 				result = await worker.getExtractedTrackData();
 				break;

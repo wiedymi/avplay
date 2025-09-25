@@ -1,6 +1,7 @@
 import type { FileInfo, FrameData } from "@avplay/decoder";
 import { decoderSingleton } from "./decoder/decoder-singleton";
 import { RendererFactory } from "./renderers/factory";
+import type { TrackExtractionResult } from "./types/decoder";
 import type {
 	IVideoRenderer,
 	RendererKind,
@@ -605,7 +606,7 @@ export class AvplayPlayer {
 	async extractTrack(
 		trackType: number,
 		trackIndex: number,
-	): Promise<{ data: Uint8Array; size: number } | null> {
+	): Promise<TrackExtractionResult | null> {
 		try {
 			return await decoderSingleton.extractTrack(trackType, trackIndex);
 		} catch {

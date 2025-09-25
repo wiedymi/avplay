@@ -1,4 +1,4 @@
-import type { FileInfo, RendererKind } from "@avplay/core";
+import type { FileInfo, RendererKind, TrackExtractionResult } from "@avplay/core";
 import { AvplayPlayer } from "@avplay/core";
 import {
 	useCallback,
@@ -61,7 +61,7 @@ export interface UseAvplayApi {
 	extractTrack: (
 		tt: number,
 		ti: number,
-	) => Promise<{ data: Uint8Array; size: number } | null | undefined>;
+	) => Promise<TrackExtractionResult | null | undefined>;
 	extractAttachment: (
 		i: number,
 	) => Promise<{ data: Uint8Array; size: number } | null | undefined>;

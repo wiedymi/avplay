@@ -5,9 +5,11 @@
 	"type": "module",
 	"scripts": {
 		"dev": "bun --hot src/index.tsx",
-    "build": "bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
+    "build": "bash build.sh",
+    "serve": "bun src/server.ts",
+    "build:serve": "bash build.sh && bun src/server.ts",
 		"build-worker": "echo 'Worker is provided by @avplay/core'",
-		"start": "NODE_ENV=production bun src/index.tsx",
+		"start": "NODE_ENV=production bun src/server.ts",
 		"clean": "rm -rf dist node_modules"
 	},
 	"dependencies": {

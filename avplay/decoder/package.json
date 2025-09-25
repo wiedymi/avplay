@@ -17,6 +17,9 @@
     },
     "./decoder.js": {
       "default": "./dist/decoder.js"
+    },
+    "./decoder.wasm": {
+      "default": "./dist/decoder.wasm"
     }
   },
   "files": [
@@ -26,7 +29,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "bun build src/decoder-worker.ts --outdir=dist --target=browser --minify && bun build src/index.ts --outdir=dist --format=esm --target=browser --minify && bun run tsc -p tsconfig.build.json && cp -f ../../output/decoder.js dist/decoder.js",
+    "build": "bun build src/decoder-worker.ts --outdir=dist --target=browser --minify && bun build src/index.ts --outdir=dist --format=esm --target=browser --minify && bun run tsc -p tsconfig.build.json && cp -f ../../output/decoder.js dist/decoder.js && cp -f ../../output/decoder.wasm dist/decoder.wasm",
     "clean": "rm -rf dist types node_modules"
   },
   "devDependencies": {

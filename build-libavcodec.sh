@@ -66,15 +66,34 @@ emconfigure env PKG_CONFIG_PATH="$PKG_CONFIG_PATH" \
     --enable-nonfree \
     --enable-decoders \
     --enable-libdav1d \
-    --enable-encoders \
+    --disable-encoders \
     --enable-parsers \
-    --enable-demuxers \
-    --enable-muxers \
-    --enable-protocols \
+    --disable-demuxers \
+    --enable-demuxer=mov,mp4,m4a,3gp,3g2,mj2 \
+    --enable-demuxer=avi \
+    --enable-demuxer=matroska,webm \
+    --enable-demuxer=flv \
+    --enable-demuxer=mpegts \
+    --enable-demuxer=mpegps \
+    --enable-demuxer=ogg \
+    --enable-demuxer=wav \
+    --enable-demuxer=mp3 \
+    --enable-demuxer=aac \
+    --enable-demuxer=flac \
+    --enable-demuxer=h264 \
+    --enable-demuxer=hevc \
+    --enable-demuxer=ivf \
+    --enable-demuxer=rawvideo \
+    --enable-demuxer=ass \
+    --enable-demuxer=srt \
+    --enable-demuxer=webvtt \
+    --disable-muxers \
+    --disable-protocols \
+    --enable-protocol=file \
     --disable-asm \
     --disable-x86asm \
     --disable-inline-asm \
-    --disable-pthreads \
+    --enable-pthreads \
     --disable-w32threads \
     --disable-os2threads \
     --disable-vulkan \
@@ -88,9 +107,9 @@ emconfigure env PKG_CONFIG_PATH="$PKG_CONFIG_PATH" \
     --cxx=em++ \
     --ar=emar \
     --ranlib=emranlib \
-    --extra-cflags="-O3 -fno-exceptions -fno-rtti -s USE_PTHREADS=0" \
-    --extra-cxxflags="-O3 -fno-exceptions -fno-rtti -s USE_PTHREADS=0" \
-    --extra-ldflags="-O3 -s INITIAL_MEMORY=33554432" \
+    --extra-cflags="-O3 -fno-exceptions -fno-rtti -pthread -flto -msimd128 -ffast-math" \
+    --extra-cxxflags="-O3 -fno-exceptions -fno-rtti -pthread -flto -msimd128" \
+    --extra-ldflags="-O3 -pthread -flto -s INITIAL_MEMORY=33554432" \
     --pkg-config-flags="--static"
 
 echo "Building FFmpeg libraries..."

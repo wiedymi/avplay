@@ -45,7 +45,12 @@ interface WASMModule {
 	HEAPF32: Float32Array;
 }
 
-declare function createDecoderModule(): Promise<WASMModule>;
+declare function createDecoderModule(config?: {
+	mainScriptUrlOrBlob?: string | Blob;
+	print?: (text: string) => void;
+	printErr?: (text: string) => void;
+	locateFile?: (path: string) => string;
+}): Promise<WASMModule>;
 
 const TRACK_TYPE_LABEL: Record<number, "video" | "audio" | "subtitle"> = {
 	0: "video",
@@ -150,6 +155,7 @@ class DecoderWorker {
 	private isInitialized = false;
 	private isPaused = false;
 
+
 	async init(decoderUrl?: string): Promise<{
 		success: boolean;
 		version?: string;
@@ -162,13 +168,27 @@ class DecoderWorker {
 			}
 			const loadTimer = perfTimer("script_load");
 			const url = decoderUrl || "/decoder.js";
+			console.log(`Loading decoder script from ${url}`);
 			self.importScripts(url);
+			console.log(`Decoder script loaded from ${url}`);
 			loadTimer.end();
 			if (typeof createDecoderModule === "undefined") {
 				throw new Error("createDecoderModule is not available");
 			}
 			const moduleTimer = perfTimer("module_creation");
-			this.module = await createDecoderModule();
+			console.log("Creating decoder module...");
+			// Initialize module with WASM Workers support
+			this.module = await createDecoderModule({
+				print: (text: string) => console.log("[WASM]", text),
+				printErr: (text: string) => console.error("[WASM]", text),
+				locateFile: (path: string) => {
+					console.log(`Locating file ${path}`);
+					if (path.endsWith(".wasm")) {
+						return url.replace(".js", ".wasm");
+					}
+					return path;
+				}
+			});
 			moduleTimer.end();
 			this.isInitialized = true;
 			const version = this.module.ccall(

@@ -163,7 +163,10 @@ int decoder_init_format(AVDecoder *decoder, uint8_t *data, int size) {
                 }
 
                 AVDictionary *opts = NULL;
-                av_dict_set(&opts, "threads", "1", 0);
+
+                // Configure threading for video decoding
+                decoder->video_codec_ctx->thread_count = 0; // 0 = auto-detect optimal thread count
+                decoder->video_codec_ctx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE; // Enable both frame and slice threading
 
                 if (stream->codecpar->codec_id == AV_CODEC_ID_AV1) {
                     if (decoder->video_codec_ctx->pix_fmt == AV_PIX_FMT_NONE) {
@@ -198,6 +201,10 @@ int decoder_init_format(AVDecoder *decoder, uint8_t *data, int size) {
                     avcodec_free_context(&decoder->audio_codec_ctx);
                     continue;
                 }
+
+                // Configure threading for audio decoding
+                decoder->audio_codec_ctx->thread_count = 0; // 0 = auto-detect
+                decoder->audio_codec_ctx->thread_type = FF_THREAD_FRAME;
 
                 if (avcodec_open2(decoder->audio_codec_ctx, decoder->audio_codec, NULL) < 0) {
                     avcodec_free_context(&decoder->audio_codec_ctx);
@@ -351,4 +358,50 @@ const char* decoder_get_version() {
              LIBAVCODEC_VERSION_MINOR,
              LIBAVCODEC_VERSION_MICRO);
     return version;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int decoder_set_thread_count(AVDecoder *decoder, int count) {
+    if (!decoder) return -1;
+
+    // Set thread count for video codec if available
+    if (decoder->video_codec_ctx) {
+        decoder->video_codec_ctx->thread_count = count;
+
+        // If count is 1, disable threading. Otherwise enable frame threading
+        if (count == 1) {
+            decoder->video_codec_ctx->thread_type = 0;
+        } else {
+            decoder->video_codec_ctx->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
+        }
+    }
+
+    // Set thread count for audio codec if available
+    if (decoder->audio_codec_ctx) {
+        decoder->audio_codec_ctx->thread_count = count;
+
+        if (count == 1) {
+            decoder->audio_codec_ctx->thread_type = 0;
+        } else {
+            decoder->audio_codec_ctx->thread_type = FF_THREAD_FRAME;
+        }
+    }
+
+    return 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int decoder_get_thread_count(AVDecoder *decoder) {
+    if (!decoder) return 0;
+
+    // Return video codec thread count if available, otherwise audio
+    if (decoder->video_codec_ctx) {
+        return decoder->video_codec_ctx->thread_count;
+    }
+
+    if (decoder->audio_codec_ctx) {
+        return decoder->audio_codec_ctx->thread_count;
+    }
+
+    return 0;
 }

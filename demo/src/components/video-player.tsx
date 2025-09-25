@@ -48,7 +48,12 @@ export const VideoPlayer: React.FC = () => {
 		switchSubtitleTrack,
 		extractTrack,
 		extractAttachment,
-	} = useAvplay();
+	} = useAvplay({
+  	assets: {
+  		workerUrl: '/decoder-worker.js',
+  		decoderUrl: '/decoder.js'
+  	}
+	});
 
 	const onLoadVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const f = e.target.files?.[0];

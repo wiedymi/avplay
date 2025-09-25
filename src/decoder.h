@@ -161,6 +161,10 @@ void decoder_cleanup_buffer_pool(AVDecoder *decoder);
 // Core decoder functions
 int decoder_seek(AVDecoder *decoder, double time_seconds);
 
+// Threading control functions
+int decoder_set_thread_count(AVDecoder *decoder, int count);
+int decoder_get_thread_count(AVDecoder *decoder);
+
 // External assets APIs
 // Add a custom font file to the runtime fonts directory used by the subtitles filter
 int decoder_add_font(AVDecoder *decoder, const char *filename, uint8_t *data, int size);

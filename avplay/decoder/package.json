@@ -6,6 +6,12 @@
   "sideEffects": false,
   "types": "./types/index.d.ts",
   "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "bun": "./dist/index.js",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
     "./decoder-worker.js": {
       "default": "./dist/decoder-worker.js"
     },
@@ -20,7 +26,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "cp -f ../../output/decoder.js dist/decoder.js || true && bun build src/decoder-worker.ts --outdir=dist --target=browser --minify && bun run tsc -p tsconfig.build.json && cp src/decoder.js dist/decoder.js",
+    "build": "cp -f ../../output/decoder.js dist/decoder.js || true && bun build src/decoder-worker.ts --outdir=dist --target=browser --minify && bun build src/index.ts --outdir=dist --format=esm --target=browser --minify && bun run tsc -p tsconfig.build.json && cp src/decoder.js dist/decoder.js",
     "clean": "rm -rf dist types node_modules"
   },
   "devDependencies": {

@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "bun --hot src/index.tsx",
-		"build": "bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*' && cp ../output/decoder.js ./public/decoder.js && cp ../node_modules/@avplay/core/dist/workers/decoder-worker.js ./public/decoder-worker.js",
+    "build": "bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*' && cp ../node_modules/@avplay/decoder/dist/decoder.js ./public/decoder.js && cp ../node_modules/@avplay/decoder/dist/decoder-worker.js ./public/decoder-worker.js",
 		"build-worker": "echo 'Worker is provided by @avplay/core'",
 		"start": "NODE_ENV=production bun src/index.tsx",
 		"clean": "rm -rf dist node_modules"

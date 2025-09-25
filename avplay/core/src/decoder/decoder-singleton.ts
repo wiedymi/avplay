@@ -1,4 +1,4 @@
-import type { FileInfo, FrameData } from "../types/decoder";
+import type { FileInfo, FrameData } from "@avplay/decoder";
 // URLs are provided by the host application (e.g., demo) via setAssetUrls
 
 interface WorkerMessage {

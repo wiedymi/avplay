@@ -1,29 +1,29 @@
 {
-	"name": "@avplay/decoder",
-	"version": "0.0.1",
-	"private": false,
-	"type": "module",
-	"sideEffects": false,
-	"types": "./types/index.d.ts",
-	"exports": {
-		"./decoder-worker.js": {
-			"default": "./dist/decoder-worker.js"
-		},
-		"./decoder.js": {
-			"default": "./dist/decoder.js"
-		}
-	},
-	"files": [
-		"dist",
-		"types",
-		"README.md",
-		"LICENSE"
-	],
-	"scripts": {
-		"build": "cp -f ../../output/decoder.js dist/decoder.js || true && bun build src/decoder-worker.ts --outdir=dist --target=browser --minify && bun run tsc -p tsconfig.build.json && cp src/decoder.js dist/decoder.js",
-		"clean": "rm -rf dist types node_modules"
-	},
-	"devDependencies": {
-		"typescript": "^5.6.2"
-	}
+  "name": "@avplay/decoder",
+  "version": "0.9.0",
+  "private": false,
+  "type": "module",
+  "sideEffects": false,
+  "types": "./types/index.d.ts",
+  "exports": {
+    "./decoder-worker.js": {
+      "default": "./dist/decoder-worker.js"
+    },
+    "./decoder.js": {
+      "default": "./dist/decoder.js"
+    }
+  },
+  "files": [
+    "dist",
+    "types",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "cp -f ../../output/decoder.js dist/decoder.js || true && bun build src/decoder-worker.ts --outdir=dist --target=browser --minify && bun run tsc -p tsconfig.build.json && cp src/decoder.js dist/decoder.js",
+    "clean": "rm -rf dist types node_modules"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.2"
+  }
 }

@@ -1,36 +1,36 @@
 {
-	"name": "@avplay/react",
-	"version": "0.9.1",
-	"private": false,
-	"type": "module",
-	"sideEffects": false,
-	"types": "./dist/index.d.ts",
-	"exports": {
-		".": {
-			"types": "./dist/index.d.ts",
-			"bun": "./src/index.ts",
-			"development": "./src/index.ts",
-			"import": "./dist/index.js",
-			"default": "./dist/index.js"
-		}
-	},
-	"files": [
-		"dist",
-		"README.md",
-		"LICENSE"
-	],
-	"peerDependencies": {
-		"react": "^18 || ^19"
-	},
-	"dependencies": {
-		"@avplay/core": "^0.9.0"
-	},
-	"devDependencies": {
-		"@types/react": "^18.3.5 || ^19.0.0",
-		"typescript": "^5.6.2"
-	},
-	"scripts": {
-		"build": "bun build src/index.ts --outdir=dist --format=esm --target=browser --minify --external react --external react-dom && bun run tsc -p tsconfig.build.json",
-		"clean": "rm -rf dist node_modules"
-	}
+  "name": "@avplay/react",
+  "version": "0.9.1",
+  "private": false,
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "development": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "react": "^18 || ^19"
+  },
+  "dependencies": {
+    "@avplay/core": "^0.9.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.5 || ^19.0.0",
+    "typescript": "^5.6.2"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir=dist --format=esm --target=browser --minify --external react --external react-dom && bun run tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist node_modules"
+  }
 }

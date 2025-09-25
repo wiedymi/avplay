@@ -264,8 +264,16 @@ fi
 log "Publishing packages to npm..."
 for dir in "${PKGS[@]}"; do
   if [[ -n "$PROXY" || -n "$NPM_REGISTRY" || "$NPM_STRICT_SSL" == "false" ]]; then
-    # Ensure per-command isolation of env for npm publish
-    ( export HTTP_PROXY="$HTTP_PROXY" HTTPS_PROXY="$HTTPS_PROXY" NPM_CONFIG_PROXY="$NPM_CONFIG_PROXY" NPM_CONFIG_HTTPS_PROXY="$NPM_CONFIG_HTTPS_PROXY" NPM_CONFIG_REGISTRY="$NPM_CONFIG_REGISTRY" NPM_CONFIG_STRICT_SSL="${NPM_CONFIG_STRICT_SSL:-}" NODE_TLS_REJECT_UNAUTHORIZED="${NODE_TLS_REJECT_UNAUTHORIZED:-}"; publish_pkg "$dir" )
+    # Ensure per-command isolation of env for npm publish (safe defaults for set -u)
+    ( export \
+        HTTP_PROXY="${HTTP_PROXY-}" \
+        HTTPS_PROXY="${HTTPS_PROXY-}" \
+        NPM_CONFIG_PROXY="${NPM_CONFIG_PROXY-}" \
+        NPM_CONFIG_HTTPS_PROXY="${NPM_CONFIG_HTTPS_PROXY-}" \
+        NPM_CONFIG_REGISTRY="${NPM_CONFIG_REGISTRY-}" \
+        NPM_CONFIG_STRICT_SSL="${NPM_CONFIG_STRICT_SSL-}" \
+        NODE_TLS_REJECT_UNAUTHORIZED="${NODE_TLS_REJECT_UNAUTHORIZED-}"; \
+      publish_pkg "$dir" )
   else
     publish_pkg "$dir"
   fi

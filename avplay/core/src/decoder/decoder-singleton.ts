@@ -115,7 +115,7 @@ class DecoderSingleton {
 		let worker: Worker;
 		try {
 			worker = new Worker(resolvedWorkerUrl);
-		} catch (error) {
+		} catch {
 			// Fallback for environments that block cross-origin Worker scripts
 			// Bootstraps a same-origin blob worker that imports the remote worker script
 			const bootstrap = `self.importScripts(${JSON.stringify(resolvedWorkerUrl)});`;

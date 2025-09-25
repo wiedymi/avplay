@@ -65,9 +65,6 @@ coverage/
 .env.test.local
 .env.production.local
 
-# Docker output
-output/
-
 # Temporary files
 *.tmp
 *.temp

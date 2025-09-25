@@ -1,4 +1,5 @@
 #include "decoder.h"
+#include "decoder_sync.h"
 
 EMSCRIPTEN_KEEPALIVE
 int decoder_has_audio(AVDecoder *decoder) {
@@ -17,20 +18,26 @@ int decoder_get_audio_channels(AVDecoder *decoder) {
 
 EMSCRIPTEN_KEEPALIVE
 int decoder_get_audio_buffer_size(AVDecoder *decoder) {
+    // Keep the original simple implementation
     return decoder ? decoder->audio_buffer_pos : 0;
 }
 
 EMSCRIPTEN_KEEPALIVE
 float* decoder_get_audio_buffer(AVDecoder *decoder) {
+    // Keep the original simple implementation - sync system is for timing only
     if (!decoder || decoder->audio_buffer_pos == 0) return NULL;
     return (float*)decoder->audio_buffer;
 }
 
 EMSCRIPTEN_KEEPALIVE
 void decoder_clear_audio_buffer(AVDecoder *decoder) {
-    if (decoder) {
-        decoder->audio_buffer_pos = 0;
-    }
+    if (!decoder) return;
+
+    // Clear sync system audio buffer - use API instead of direct access
+    // Note: There's no direct reset API, but clearing old buffer will trigger refill
+
+    // Clear old buffer
+    decoder->audio_buffer_pos = 0;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -139,6 +146,11 @@ int decoder_switch_audio_track(AVDecoder *decoder, int track_index) {
 
         decoder->audio_sample_rate = decoder->audio_codec_ctx->sample_rate;
         decoder->audio_channels = 2;
+
+        // Reinitialize sync system with new audio parameters
+        if (decoder->sync_ctx) {
+            sync_init_playback(decoder->sync_ctx, 2, decoder->audio_sample_rate);
+        }
     }
 
     if (decoder->current_position > 0.0) {

@@ -46,6 +46,7 @@ export interface AvplayPlayerState {
 	targetFrameTime: number;
 	bufferHealth: number;
 	rendererKind: RendererKind;
+	decode_start_time?: number; // Track when decode batch started
 }
 
 export class AvplayPlayer {
@@ -71,24 +72,43 @@ export class AvplayPlayer {
 	private volumeLevel = 0.7;
 
 	private frameBuffer: FrameData[] = [];
-	private readonly MAX_FRAME_BUFFER = 60;
-	private readonly MIN_BUFFER_FRAMES = 20;
-	private readonly PREFETCH_THRESHOLD = 35;
-	private readonly BATCH_DECODE_SIZE = 8;
+	private readonly MAX_FRAME_BUFFER = 120; // Increased for smoother playback
+	private readonly MIN_BUFFER_FRAMES = 15;  // Reduced for faster startup
+	private readonly PREFETCH_THRESHOLD = 45; // Adaptive threshold
+	private readonly BATCH_DECODE_SIZE = 6;   // Smaller batches for consistent performance
+
+	// Adaptive buffering parameters
+	private adaptiveBufferSize = 60;          // Dynamic buffer size
+	private bufferHealthThreshold = 0.3;      // 30% health threshold
+	private performanceMetrics = {
+		avgDecodeTime: 16.67,                 // Target: 16.67ms per frame (60fps)
+		recentDecodeTimes: [] as number[],
+		droppedFrames: 0,
+		bufferUnderruns: 0
+	};
 
 	private animationId: number | null = null;
 	private continuousDecodeInterval: number | null = null;
 	private isDecoding = false;
 	private decodePromise: Promise<unknown> | null = null;
 
-	// Audio
+	// Audio with enhanced buffering
 	private audioContext: AudioContext | null = null;
 	private gainNode: GainNode | null = null;
-	private audioQueue: { buffer: AudioBuffer; duration: number }[] = [];
+	private audioQueue: { buffer: AudioBuffer; duration: number; pts: number }[] = [];
+	private readonly MAX_AUDIO_QUEUE = 100; // Increased from 40
 	private nextAudioTime = 0;
 	private isAudioPlaying = false;
+	private audioMasterClock = 0;        // Audio-based master clock
+	private lastAudioPts = 0;            // Last audio PTS
 
-	// Timing
+	// PTS-based timing (replaces frame-based timing)
+	private masterClockTime = 0;         // Current master clock time
+	private videoClockTime = 0;          // Video clock for drift calculation
+	private clockSyncDrift = 0;          // Difference between audio and video clocks
+	private lastClockUpdate = 0;         // When clocks were last updated
+
+	// Legacy timing (kept for compatibility)
 	private videoStartTime = 0;
 	private pausedTime = 0;
 
@@ -626,22 +646,92 @@ export class AvplayPlayer {
 
 	// Internal helpers
 	private handleFrameDecoded = (data: FrameData) => {
+		const now = performance.now();
+
+		// Track decode performance for adaptive buffering
+		if (this.state.decode_start_time) {
+			const decodeTime = now - this.state.decode_start_time;
+			this.updateDecodeMetrics(decodeTime);
+		}
+
+		// Update PTS-based clocks if timestamp is available
+		if (typeof data.timestamp === "number") {
+			this.updateVideoClockTime(data.timestamp);
+			this.calculateClockDrift();
+		}
+
 		// Accept frames in all states; decode loops are gated elsewhere.
-		if (this.frameBuffer.length < this.MAX_FRAME_BUFFER) {
+		// Use adaptive buffer size based on performance
+		if (this.frameBuffer.length < this.adaptiveBufferSize) {
 			this.frameBuffer.push(data);
 			this.state.bufferHealth =
-				(this.frameBuffer.length / this.MAX_FRAME_BUFFER) * 100;
+				(this.frameBuffer.length / this.adaptiveBufferSize) * 100;
+		} else {
+			// Buffer overflow - drop oldest frame
+			this.frameBuffer.shift();
+			this.frameBuffer.push(data);
+			this.performanceMetrics.droppedFrames++;
 		}
+
+		// Enhanced audio handling with PTS
 		if (
 			data.audioData &&
 			data.audioData.length > 0 &&
-			this.audioQueue.length < 40
+			this.audioQueue.length < this.MAX_AUDIO_QUEUE
 		) {
 			const sr =
 				typeof data.audioSampleRate === "number" ? data.audioSampleRate : 48000;
 			const ch =
 				typeof data.audioChannels === "number" ? data.audioChannels : 2;
-			this.scheduleAudioBuffer(data.audioData, sr, ch);
+			const audioPts = typeof data.timestamp === "number" ? data.timestamp : this.lastAudioPts;
+			this.scheduleAudioBuffer(data.audioData, sr, ch, audioPts);
+		}
+	};
+
+	private updateDecodeMetrics(decodeTime: number) {
+		this.performanceMetrics.recentDecodeTimes.push(decodeTime);
+
+		// Keep only recent 30 measurements
+		if (this.performanceMetrics.recentDecodeTimes.length > 30) {
+			this.performanceMetrics.recentDecodeTimes.shift();
+		}
+
+		// Calculate rolling average
+		const sum = this.performanceMetrics.recentDecodeTimes.reduce((a, b) => a + b, 0);
+		this.performanceMetrics.avgDecodeTime = sum / this.performanceMetrics.recentDecodeTimes.length;
+
+		// Adjust buffer size based on performance
+		this.adaptBufferSize();
+	}
+
+	private adaptBufferSize() {
+		const targetFrameTime = 1000 / this.state.frameRate; // Target time per frame
+		const isSlowDecoding = this.performanceMetrics.avgDecodeTime > targetFrameTime * 1.5;
+		const hasRecentDrops = this.performanceMetrics.droppedFrames > 0;
+
+		if (isSlowDecoding || hasRecentDrops) {
+			// Increase buffer size for struggling systems
+			this.adaptiveBufferSize = Math.min(this.MAX_FRAME_BUFFER, this.adaptiveBufferSize + 10);
+		} else if (this.performanceMetrics.avgDecodeTime < targetFrameTime * 0.8) {
+			// Decrease buffer size for fast systems to reduce latency
+			this.adaptiveBufferSize = Math.max(30, this.adaptiveBufferSize - 5);
+		}
+	}
+
+	private updateVideoClockTime(pts: number) {
+		this.videoClockTime = pts;
+		this.lastClockUpdate = performance.now();
+	}
+
+	private calculateClockDrift() {
+		// Calculate drift between audio and video clocks
+		this.clockSyncDrift = Math.abs(this.videoClockTime - this.audioMasterClock);
+
+		// Update master clock (prefer audio clock)
+		if (this.audioMasterClock > 0) {
+			this.masterClockTime = this.audioMasterClock;
+		} else {
+			this.masterClockTime = this.videoClockTime;
 		}
 	};
 
@@ -665,6 +755,7 @@ export class AvplayPlayer {
 		audioData: Float32Array,
 		sampleRate: number,
 		channels: number,
+		pts: number = 0,
 	) {
 		if (!this.audioContext || !audioData) return;
 		const samples = Math.floor(audioData.length / Math.max(1, channels));
@@ -683,9 +774,15 @@ export class AvplayPlayer {
 					channelOut[i] = audioData[i * channels + ch] ?? 0;
 			}
 		}
+
+		// Update audio master clock
+		this.lastAudioPts = pts;
+		this.audioMasterClock = pts;
+
 		this.audioQueue.push({
 			buffer: audioBuffer,
 			duration: audioBuffer.duration,
+			pts: pts,
 		});
 	}
 
@@ -716,9 +813,24 @@ export class AvplayPlayer {
 					const source = this.audioContext.createBufferSource();
 					source.buffer = item.buffer;
 					source.connect(this.gainNode);
-					const startTime = Math.max(this.nextAudioTime, currentTime + 0.01);
+
+					// Use PTS for better sync if available
+					let startTime = Math.max(this.nextAudioTime, currentTime + 0.01);
+					if (item.pts > 0 && this.masterClockTime > 0) {
+						// Adjust timing based on master clock drift
+						const drift = item.pts - this.masterClockTime;
+						if (Math.abs(drift) < 0.1) { // Within 100ms tolerance
+							startTime += drift * 0.5; // Gradual correction
+						}
+					}
+
 					source.start(startTime);
 					scheduled++;
+
+					// Update audio master clock
+					if (item.pts > 0) {
+						this.audioMasterClock = item.pts;
+					}
 				} catch {}
 			}
 			this.nextAudioTime += item.duration;
@@ -766,16 +878,29 @@ export class AvplayPlayer {
 			return;
 		}
 		this.isDecoding = true;
+
+		// Track decode start time for performance metrics
+		this.state.decode_start_time = performance.now();
+
 		try {
-			const frameBufferSpace = this.MAX_FRAME_BUFFER - this.frameBuffer.length;
+			const frameBufferSpace = this.adaptiveBufferSize - this.frameBuffer.length;
 			let batchSize = this.BATCH_DECODE_SIZE;
-			if (this.frameBuffer.length < this.MIN_BUFFER_FRAMES)
+
+			// Adaptive batch sizing based on buffer health and performance
+			const bufferHealthRatio = this.frameBuffer.length / this.adaptiveBufferSize;
+
+			if (bufferHealthRatio < 0.2) {
+				// Critical - decode aggressively
+				batchSize = Math.min(12, frameBufferSpace);
+			} else if (this.frameBuffer.length < this.MIN_BUFFER_FRAMES) {
+				batchSize = Math.min(8, frameBufferSpace);
+			} else if (this.frameBuffer.length < this.PREFETCH_THRESHOLD) {
 				batchSize = Math.min(6, frameBufferSpace);
-			else if (this.frameBuffer.length < this.PREFETCH_THRESHOLD)
-				batchSize = Math.min(4, frameBufferSpace);
-			else if (forceBatch)
+			} else if (forceBatch) {
 				batchSize = Math.min(this.BATCH_DECODE_SIZE, frameBufferSpace);
-			else if (frameBufferSpace <= 2) return;
+			} else if (frameBufferSpace <= 2) {
+				return;
+			}
 
 			for (let i = 0; i < batchSize; i++) {
 				if (
@@ -796,7 +921,20 @@ export class AvplayPlayer {
 		} finally {
 			this.isDecoding = false;
 		}
-		if (this.state.playbackState === "PLAYING") this.processAudioQueue();
+		if (this.state.playbackState === "PLAYING") {
+			this.processAudioQueue();
+
+			// Check if audio needs more data for smooth playback
+			this.checkAudioBufferHealth();
+		}
+	}
+
+	private async checkAudioBufferHealth() {
+		// Adaptive audio buffering based on queue health
+		if (this.audioQueue.length < 10) {
+			// Low on audio - decode more aggressively
+			this.decodeFrames(true);
+		}
 	}
 
 	private async renderLoop() {

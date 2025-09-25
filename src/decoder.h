@@ -19,6 +19,10 @@
 #include <stdio.h>
 #include <sys/time.h>
 
+// Forward declarations - avoid typedef conflicts
+struct SyncContext;
+struct SyncStats;
+
 // Performance logging macros
 #define PERF_START(name) \
     struct timeval perf_start_##name, perf_end_##name; \
@@ -133,6 +137,20 @@ typedef struct {
     double frame_timestamp; // PTS timestamp of current frame
     int frame_count; // Frame counter for timing calculations
 
+    // Synchronization system
+    struct SyncContext *sync_ctx;
+
+    // Enhanced audio buffering
+    int dynamic_audio_buffer_size;
+    int audio_buffer_target_ms;  // Target buffer size in milliseconds
+    double last_audio_pts;       // Last audio PTS for sync
+    double last_video_pts;       // Last video PTS for sync
+
+    // Performance and buffer health
+    int frames_in_flight;        // Frames currently being decoded
+    double decode_start_time;    // When current decode batch started
+    int buffer_health_percent;   // Overall buffer health 0-100
+
     // Memory pool for frequent allocations
     BufferPool *buffer_pool;
 } AVDecoder;
@@ -164,5 +182,17 @@ int decoder_add_font(AVDecoder *decoder, const char *filename, uint8_t *data, in
 int decoder_load_external_subtitles(AVDecoder *decoder, const char *filename, uint8_t *data, int size);
 // Rebuild subtitle filter graph using current decoder->subtitle_file_path
 int decoder_rebuild_subtitle_filter(AVDecoder *decoder);
+
+// Synchronization APIs
+// Initialize sync system for the decoder
+int decoder_init_sync(AVDecoder *decoder);
+// Clean up sync system resources
+void decoder_cleanup_sync(AVDecoder *decoder);
+// Get current sync statistics
+const struct SyncStats* decoder_get_sync_stats(AVDecoder *decoder);
+// Get audio buffer health percentage
+int decoder_get_audio_buffer_health(AVDecoder *decoder);
+// Check if more audio data is needed for smooth playback
+int decoder_audio_needs_more_data(AVDecoder *decoder);
 
 #endif // DECODER_H

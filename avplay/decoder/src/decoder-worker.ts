@@ -853,6 +853,29 @@ class DecoderWorker {
 		) as number;
 	}
 
+	async getAudioBufferHealth(): Promise<number> {
+		if (!this.module) throw new Error("Module not initialized");
+		if (!this.decoderHandle) throw new Error("Decoder not created");
+		return this.module.ccall(
+			"decoder_get_audio_buffer_health",
+			"number",
+			["number"],
+			[this.decoderHandle],
+		) as number;
+	}
+
+	async audioNeedsMoreData(): Promise<boolean> {
+		if (!this.module) throw new Error("Module not initialized");
+		if (!this.decoderHandle) throw new Error("Decoder not created");
+		const needsData = this.module.ccall(
+			"decoder_audio_needs_more_data",
+			"number",
+			["number"],
+			[this.decoderHandle],
+		) as number;
+		return needsData === 1;
+	}
+
 	async pause(): Promise<void> {
 		this.isPaused = true;
 	}
@@ -957,6 +980,12 @@ self.addEventListener("message", async (event: MessageEvent<WorkerMessage>) => {
 			}
 			case "rebuild_subtitle_filter":
 				result = await worker.rebuildSubtitleFilter();
+				break;
+			case "get_audio_buffer_health":
+				result = await worker.getAudioBufferHealth();
+				break;
+			case "audio_needs_more_data":
+				result = await worker.audioNeedsMoreData();
 				break;
 			case "pause":
 				await worker.pause();

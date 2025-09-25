@@ -1,4 +1,5 @@
 #include "decoder.h"
+#include "decoder_sync.h"
 
 extern int init_subtitle_decoder(AVDecoder *decoder);
 extern int decoder_render_subtitles_filter(AVDecoder *decoder, AVFrame *video_frame);
@@ -47,21 +48,37 @@ int decoder_decode_frame(AVDecoder *decoder) {
             if (ret >= 0) {
                 ret = avcodec_receive_frame(decoder->video_codec_ctx, decoder->frame);
                 if (ret == 0) {
-                    // Update current position and frame timestamp for better sync
+                    // Update current position and frame timestamp using proper PTS
                     AVStream *video_stream = decoder->format_ctx->streams[decoder->video_stream_idx];
                     if (decoder->frame->pts != AV_NOPTS_VALUE) {
                         if (video_stream->time_base.den > 0) {
-                            decoder->current_position = decoder->frame->pts * av_q2d(video_stream->time_base);
-                            decoder->frame_timestamp = decoder->current_position;
+                            decoder->frame_timestamp = pts_to_seconds(decoder->frame->pts, video_stream->time_base);
+                            decoder->current_position = decoder->frame_timestamp;
+                            decoder->last_video_pts = decoder->frame_timestamp;
                         }
                     } else {
                         // Estimate timestamp based on frame rate if PTS is not available
                         if (decoder->frame_count > 0 && video_stream->avg_frame_rate.den > 0) {
                             double frame_duration = (double)video_stream->avg_frame_rate.den / video_stream->avg_frame_rate.num;
                             decoder->frame_timestamp = decoder->frame_count * frame_duration;
+                            decoder->last_video_pts = decoder->frame_timestamp;
                         }
                     }
+
+                    // Check with sync system if frame should be presented
+                    int sync_decision = 1; // Default: present frame
+                    if (decoder->sync_ctx && decoder->frame_timestamp > 0) {
+                        sync_decision = sync_check_video_timing(decoder->sync_ctx, decoder->frame_timestamp);
+                        sync_update_master_clock(decoder->sync_ctx, decoder->frame_timestamp, SYNC_CLOCK_VIDEO);
+                    }
+
                     decoder->frame_count++;
+
+                    // Handle sync decision: -1=drop, 0=wait, 1=present
+                    if (sync_decision == -1) {
+                        // Drop this frame for sync - continue to next packet
+                        continue;
+                    }
 
                     // Subtitle rendering will be done later in decoder_get_frame_rgb() to avoid double processing
 
@@ -83,6 +100,18 @@ int decoder_decode_frame(AVDecoder *decoder) {
                 ret = avcodec_receive_frame(decoder->audio_codec_ctx, audio_frame);
 
                 if (ret == 0 && decoder->swr_ctx) {
+                    // Calculate audio PTS
+                    double audio_pts = 0.0;
+                    AVStream *audio_stream = decoder->format_ctx->streams[decoder->audio_stream_idx];
+                    if (audio_frame->pts != AV_NOPTS_VALUE && audio_stream->time_base.den > 0) {
+                        audio_pts = pts_to_seconds(audio_frame->pts, audio_stream->time_base);
+                        decoder->last_audio_pts = audio_pts;
+                    } else {
+                        // Estimate PTS if not available
+                        audio_pts = decoder->last_audio_pts + (double)audio_frame->nb_samples / decoder->audio_sample_rate;
+                        decoder->last_audio_pts = audio_pts;
+                    }
+
                     uint8_t *output_buffer[2];
                     int dst_linesize;
                     int dst_nb_samples = av_rescale_rnd(audio_frame->nb_samples,
@@ -99,11 +128,19 @@ int decoder_decode_frame(AVDecoder *decoder) {
 
                     if (converted > 0) {
                         int bytes_to_copy = converted * 2 * sizeof(float);
+
+                        // ALWAYS copy to the regular audio buffer for playback
                         if (decoder->audio_buffer_pos + bytes_to_copy <= decoder->audio_buffer_size) {
                             memcpy(decoder->audio_buffer + decoder->audio_buffer_pos,
                                   output_buffer[0], bytes_to_copy);
                             decoder->audio_buffer_pos += bytes_to_copy;
                             decoder->audio_samples_per_frame = converted;
+                        }
+
+                        // ALSO use sync system for timing if available
+                        if (decoder->sync_ctx) {
+                            sync_add_audio_samples(decoder->sync_ctx, output_buffer[0], bytes_to_copy, audio_pts);
+                            sync_update_master_clock(decoder->sync_ctx, audio_pts, SYNC_CLOCK_AUDIO);
                         }
                     }
 

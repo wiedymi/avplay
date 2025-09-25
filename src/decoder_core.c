@@ -1,4 +1,5 @@
 #include "decoder.h"
+#include "decoder_sync.h"
 
 extern int init_subtitle_decoder(AVDecoder *decoder);
 
@@ -21,10 +22,17 @@ AVDecoder* decoder_create() {
     decoder->frame_timestamp = 0.0;
     decoder->frame_count = 0;
 
-    // Initialize audio buffer size (1.0 seconds of stereo 48kHz float samples)
-    decoder->audio_buffer_size = 48000 * 2 * sizeof(float) * 2; // ~768KB
+    // Initialize dynamic audio buffer (start with 2 seconds, can grow to 5)
+    decoder->audio_buffer_target_ms = 1000; // 1 second target
+    decoder->dynamic_audio_buffer_size = 48000 * 2 * sizeof(float) * 2; // Start with 2 seconds
+    decoder->audio_buffer_size = decoder->dynamic_audio_buffer_size;
+    decoder->last_audio_pts = 0.0;
+    decoder->last_video_pts = 0.0;
+    decoder->frames_in_flight = 0;
+    decoder->buffer_health_percent = 0;
 
     decoder->buffer_pool = NULL;
+    decoder->sync_ctx = NULL;
 
     if (!decoder->packet || !decoder->frame) {
         if (decoder->packet) av_packet_free(&decoder->packet);
@@ -35,6 +43,9 @@ AVDecoder* decoder_create() {
 
     // Initialize buffer pool for performance
     decoder_init_buffer_pool(decoder);
+
+    // Initialize synchronization system
+    decoder_init_sync(decoder);
 
     return decoder;
 }
@@ -226,13 +237,15 @@ int decoder_init_format(AVDecoder *decoder, uint8_t *data, int size) {
 
                     swr_init(decoder->swr_ctx);
 
-                    decoder->audio_buffer = (uint8_t*)malloc(decoder->audio_buffer_size);
+                    // Allocate larger dynamic audio buffer
+                    decoder->audio_buffer = (uint8_t*)malloc(decoder->dynamic_audio_buffer_size);
                     if (!decoder->audio_buffer) {
                         swr_free(&decoder->swr_ctx);
                         avcodec_free_context(&decoder->audio_codec_ctx);
                         continue;
                     }
                     decoder->audio_buffer_pos = 0;
+                    decoder->audio_buffer_size = decoder->dynamic_audio_buffer_size;
                 }
             }
         } else if (stream->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) {
@@ -252,6 +265,13 @@ int decoder_init_format(AVDecoder *decoder, uint8_t *data, int size) {
 
     fprintf(stderr, "DEBUG: Found %d video, %d audio, %d subtitle streams\n",
              decoder->num_video_streams, decoder->num_audio_streams, decoder->num_subtitle_streams);
+
+    // Initialize sync system for playback once we have stream info
+    if (decoder->sync_ctx && decoder->audio_codec_ctx) {
+        int channels = decoder->audio_codec_ctx->ch_layout.nb_channels;
+        int sample_rate = decoder->audio_codec_ctx->sample_rate;
+        sync_init_playback(decoder->sync_ctx, channels, sample_rate);
+    }
 
     // Don't initialize subtitle decoder by default - only when explicitly enabled
     // This prevents any subtitle-related overhead until actually needed
@@ -293,6 +313,7 @@ void decoder_destroy(AVDecoder *decoder) {
     if (decoder->attachment_streams) free(decoder->attachment_streams);
 
     decoder_cleanup_buffer_pool(decoder);
+    decoder_cleanup_sync(decoder);
 
     free(decoder);
 }
@@ -319,9 +340,16 @@ int decoder_seek(AVDecoder *decoder, double time_seconds) {
             decoder->audio_buffer_pos = 0;
         }
 
+        // Handle seek in sync system
+        if (decoder->sync_ctx) {
+            sync_handle_seek(decoder->sync_ctx, time_seconds);
+        }
+
         // Reset frame timing for better sync after seek
         decoder->frame_count = (int)(time_seconds * 25.0); // Estimate frame count
         decoder->frame_timestamp = time_seconds;
+        decoder->last_video_pts = time_seconds;
+        decoder->last_audio_pts = time_seconds;
         decoder->error_count = 0;
     }
 
@@ -399,4 +427,43 @@ int decoder_get_thread_count(AVDecoder *decoder) {
     }
 
     return 0;
+}
+
+// Synchronization API implementations
+EMSCRIPTEN_KEEPALIVE
+int decoder_init_sync(AVDecoder *decoder) {
+    if (!decoder) return -1;
+
+    if (decoder->sync_ctx) {
+        sync_context_destroy(decoder->sync_ctx);
+    }
+
+    decoder->sync_ctx = sync_context_create();
+    return decoder->sync_ctx ? 0 : -1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void decoder_cleanup_sync(AVDecoder *decoder) {
+    if (!decoder || !decoder->sync_ctx) return;
+
+    sync_context_destroy(decoder->sync_ctx);
+    decoder->sync_ctx = NULL;
+}
+
+EMSCRIPTEN_KEEPALIVE
+const struct SyncStats* decoder_get_sync_stats(AVDecoder *decoder) {
+    if (!decoder || !decoder->sync_ctx) return NULL;
+    return sync_get_stats(decoder->sync_ctx);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int decoder_get_audio_buffer_health(AVDecoder *decoder) {
+    if (!decoder || !decoder->sync_ctx) return 0;
+    return sync_get_audio_buffer_health(decoder->sync_ctx);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int decoder_audio_needs_more_data(AVDecoder *decoder) {
+    if (!decoder || !decoder->sync_ctx) return 1;
+    return sync_audio_needs_data(decoder->sync_ctx);
 }
